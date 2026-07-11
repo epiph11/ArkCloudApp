@@ -1,0 +1,34 @@
+services:
+  postgres:
+    image: postgres:16
+    container_name: arkcloud-postgres
+    environment:
+      POSTGRES_DB: arkcloud
+      POSTGRES_USER: arkcloud
+      POSTGRES_PASSWORD: arkcloud
+    ports:
+      - "5432:5432"
+    volumes:
+      - arkcloud_postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U arkcloud -d arkcloud"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  api:
+    build:
+      context: ../..
+      dockerfile: src/ArkCloud.API/Dockerfile
+    container_name: arkcloud-api
+    environment:
+      ASPNETCORE_ENVIRONMENT: Development
+      ConnectionStrings__DefaultConnection: Host=postgres;Port=5432;Database=arkcloud;Username=arkcloud;Password=arkcloud
+    ports:
+      - "8080:8080"
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+volumes:
+  arkcloud_postgres_data:
