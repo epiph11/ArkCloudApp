@@ -2,12 +2,16 @@ name: backend-ci
 
 on:
   push:
-    branches: [main, develop]
+    branches: [main, staging, develop]
+    # v* tags are what actually ship a production release (see publish-image below) —
+    # note GitHub does not apply the paths filter to tag pushes, so a version tag always
+    # runs this workflow in full regardless of what changed.
+    tags: ["v*"]
     paths:
       - "backend/**"
       - ".github/workflows/backend-ci.yml"
   pull_request:
-    branches: [main, develop]
+    branches: [main, staging, develop]
     paths:
       - "backend/**"
       - ".github/workflows/backend-ci.yml"
@@ -59,11 +63,36 @@ jobs:
       - name: Publish API
         run: dotnet publish backend/ArkCloud.API/ArkCloud.API.csproj -c Release -o ./publish
 
+  # Only runs on push (never on PRs), and only after build-test passes.
+  #
+  # A plain push to `main` does NOT publish an image — main is where staging gets merged
+  # once validated, but a production release is a deliberate act: push a `vX.Y.Z` tag (see
+  # docs/versioning, or just `git tag vX.Y.Z && git push origin vX.Y.Z` from main once merged).
+  # develop and staging pushes still publish work-in-progress images for their own environments.
+  publish-image:
+    needs: build-test
+    if: >-
+      github.event_name == 'push' &&
+      (startsWith(github.ref, 'refs/tags/v') || github.ref_name == 'staging' || github.ref_name == 'develop')
+    runs-on: ubuntu-latest
+    # Requires "development", "staging" and "production" Environments configured in
+    # Settings > Environments. Add required reviewers on "production" there to get a
+    # manual approval gate before any vX.Y.Z tag actually gets pushed to the registry —
+    # no workflow change needed to turn that on.
+    environment: ${{ startsWith(github.ref, 'refs/tags/v') && 'production' || github.ref_name == 'staging' && 'staging' || 'development' }}
+    env:
+      # Tag pushes (vX.Y.Z) publish under the version itself; branch pushes publish under
+      # a floating tag for that environment.
+      ENV_TAG: ${{ startsWith(github.ref, 'refs/tags/v') && github.ref_name || github.ref_name == 'staging' && 'staging' || 'dev' }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
       - name: Build Docker image
-        run: docker build -f backend/ArkCloud.API/Dockerfile -t ${{ env.IMAGE_NAME }}:${{ github.sha }} -t ${{ env.IMAGE_NAME }}:latest .
+        run: docker build -f backend/ArkCloud.API/Dockerfile -t ${{ env.IMAGE_NAME }}:${{ github.sha }} -t ${{ env.IMAGE_NAME }}:${{ env.ENV_TAG }} .
 
       - name: Log in to GHCR
-        if: github.event_name == 'push'
         uses: docker/login-action@v3
         with:
           registry: ghcr.io
@@ -71,7 +100,18 @@ jobs:
           password: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Push Docker image
-        if: github.event_name == 'push'
         run: |
           docker push ${{ env.IMAGE_NAME }}:${{ github.sha }}
-          docker push ${{ env.IMAGE_NAME }}:latest
+          docker push ${{ env.IMAGE_NAME }}:${{ env.ENV_TAG }}
+
+      # A version tag also moves the floating `:prod` tag, so "the current prod image" always
+      # has a stable name to reference without needing to know the latest version number.
+      - name: Update floating prod tag
+        if: startsWith(github.ref, 'refs/tags/v')
+        run: |
+          docker tag ${{ env.IMAGE_NAME }}:${{ env.ENV_TAG }} ${{ env.IMAGE_NAME }}:prod
+          docker push ${{ env.IMAGE_NAME }}:prod
+
+      # TODO once hosting is decided: add the actual deploy step here (SSH + docker
+      # compose pull/up, `az webapp` / `aws ecs update-service`, kubectl, etc.),
+      # scoped to this job so it inherits the environment gate above.
