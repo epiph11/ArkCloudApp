@@ -1,0 +1,140 @@
+@page "/orders/{Id:guid}"
+@layout MainLayout
+@inject OrdersApiClient OrdersApi
+@inject NavigationManager Navigation
+
+<PageTitle>Order details</PageTitle>
+
+<AuthorizeView>
+    <Authorized>
+        <ErrorBanner Message="@_loadError" />
+
+        @if (_order is null && _loadError is null)
+        {
+            <LoadingSpinner />
+        }
+        else if (_order is not null)
+        {
+            <h1>Order for @_order.CustomerName</h1>
+            <p>Status: <strong>@_order.Status</strong></p>
+
+            <table class="table">
+                <thead>
+                    <tr>
+                        <th>Product</th>
+                        <th>SKU</th>
+                        <th>Quantity</th>
+                        <th>Unit price</th>
+                        <th>Line total</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var item in _order.Items)
+                    {
+                        <tr>
+                            <td>@item.ProductName</td>
+                            <td>@item.Sku</td>
+                            <td>@item.Quantity</td>
+                            <td>@item.UnitPrice.ToString("0.00")</td>
+                            <td>@item.LineTotal.ToString("0.00")</td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+
+            <p><strong>Total: @_order.TotalAmount.ToString("0.00")</strong></p>
+
+            <ErrorBanner Message="@_actionError" />
+
+            <div class="mb-3">
+                @if (_order.Status == "Draft")
+                {
+                    <button class="btn btn-primary" @onclick="SubmitAsync" disabled="@_isBusy">Submit order</button>
+                }
+                else if (_order.Status == "Submitted")
+                {
+                    <AuthorizeView Roles="Admin,Manager" Context="manageContext">
+                        <Authorized>
+                            <button class="btn" @onclick="CancelAsync" disabled="@_isBusy">Cancel order</button>
+                        </Authorized>
+                    </AuthorizeView>
+                }
+
+                <a class="btn btn-link" href="orders">Back to list</a>
+            </div>
+        }
+    </Authorized>
+    <NotAuthorized>
+        <RedirectToLogin />
+    </NotAuthorized>
+</AuthorizeView>
+
+@code {
+    [Parameter]
+    public Guid Id { get; set; }
+
+    private ArkCloud.Application.DTOs.OrderResponse? _order;
+    private string? _loadError;
+    private string? _actionError;
+    private bool _isBusy;
+
+    protected override Task OnInitializedAsync() => LoadAsync();
+
+    private async Task LoadAsync()
+    {
+        try
+        {
+            _order = await OrdersApi.GetByIdAsync(Id);
+            if (_order is null)
+                _loadError = "Order not found.";
+        }
+        catch (HttpRequestException ex) when (ex.StatusCode == System.Net.HttpStatusCode.NotFound)
+        {
+            _loadError = "Order not found.";
+        }
+        catch (HttpRequestException ex)
+        {
+            _loadError = $"Could not reach the API: {ex.Message}";
+        }
+    }
+
+    private async Task SubmitAsync()
+    {
+        _actionError = null;
+        _isBusy = true;
+
+        try
+        {
+            await OrdersApi.SubmitAsync(Id);
+            await LoadAsync();
+        }
+        catch (Exception ex)
+        {
+            _actionError = ex.Message;
+        }
+        finally
+        {
+            _isBusy = false;
+        }
+    }
+
+    private async Task CancelAsync()
+    {
+        _actionError = null;
+        _isBusy = true;
+
+        try
+        {
+            await OrdersApi.CancelAsync(Id);
+            await LoadAsync();
+        }
+        catch (Exception ex)
+        {
+            _actionError = ex.Message;
+        }
+        finally
+        {
+            _isBusy = false;
+        }
+    }
+}

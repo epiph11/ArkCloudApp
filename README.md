@@ -1,27 +1,6 @@
 # ArkCloud
 
-Backend .NET 10 / PostgreSQL / EF Core suivant une architecture Domain / Application / Infrastructure / API, avec tests unitaires, tests d'intégration, Docker et CI GitHub Actions.
-
-Voir `docs/architecture.md` pour le détail des couches et des règles de dépendance.
-
-## Limites de génération (à lire avant de commencer)
-
-Ce repo a été construit fichier par fichier dans un environnement sandbox qui n'a **ni SDK .NET installé, ni accès réseau sortant** (NuGet, dot.net, GitHub bloqués). Concrètement :
-
-- Aucune commande `dotnet build` / `dotnet test` / `dotnet ef` / `docker build` n'a pu être exécutée pendant la génération. Tout le code (`.csproj`, `.cs`, `.sln`) a été écrit à la main en suivant strictement les conventions `dotnet new` pour .NET 10 et les extraits fournis dans la spec.
-- **Aucune migration EF Core n'existe encore** (`src/ArkCloud.Infrastructure/Persistence/Migrations` est vide) : il faut la générer en local (commande ci-dessous).
-- Les tests d'intégration utilisent `Database.EnsureCreatedAsync()` plutôt que `MigrateAsync()` en attendant que la migration initiale existe (voir note dans `ArkCloudApiFactory.cs`).
-- Toutes les versions de packages NuGet ont été vérifiées par recherche web au moment de la génération (juillet 2026) pour être compatibles .NET 10 : EF Core / EFCore.Design 10.0.9, Npgsql.EntityFrameworkCore.PostgreSQL 10.0.3, Npgsql 10.0.3, Serilog.AspNetCore 10.0.0, Swashbuckle.AspNetCore 10.2.3, FluentValidation 12.1.1, Microsoft.AspNetCore.Mvc.Testing 10.0.9, Testcontainers.PostgreSql 4.12.0, Microsoft.NET.Test.Sdk 18.7.0, xunit 2.9.3 + xunit.runner.visualstudio 3.1.5, FluentAssertions 7.2.2 (volontairement épinglé en v7 : la v8+ est passée sous licence commerciale Xceed, la v7 reste Apache-2.0 gratuite). Lancez quand même `dotnet restore` en local pour confirmer que rien n'a bougé depuis.
-- **`FluentValidation.AspNetCore` est déprécié** (la validation automatique MVC a été retirée du projet FluentValidation). Ce repo ne l'utilise donc pas : chaque contrôleur (`CustomersController`, `OrdersController`, `ProductsController`) injecte son `IValidator<TRequest>` et appelle `ValidateAndThrowAsync` explicitement avant d'appeler le service applicatif — l'exception `FluentValidation.ValidationException` est ensuite convertie en 400 par `ExceptionHandlingMiddleware`, donc le comportement observable (400 + `problem+json`) reste identique à une validation automatique.
-- `git init` a été tenté depuis cet environnement mais le dossier `.git` s'est corrompu à cause du pont OneDrive utilisé par la sandbox (le fichier `.git/config` est réécrit avec des octets nuls par le mécanisme de sync). Un dossier `.git` cassé peut donc traîner à la racine : supprimez-le et relancez `git init` depuis votre machine (pas depuis Cowork) :
-  ```bash
-  rm -rf .git
-  git init
-  git add -A
-  git commit -m "Initial scaffold: ArkCloud .NET 10 backend"
-  ```
-
-**Première chose à faire en local : `dotnet build` à la racine, et corriger si besoin.**
+.NET 10 / PostgreSQL / EF Core, architecture Domain / Application / Infrastructure / API, plus un frontend Blazor Server. Tests unitaires, tests d'intégration, Docker et CI GitHub Actions.
 
 ## Prérequis
 
@@ -41,35 +20,73 @@ dotnet build
 # 2. Base de données locale
 docker compose -f deploy/docker/docker-compose.yml up -d postgres
 
-# 3. Générer puis appliquer la première migration (dossier vide pour l'instant)
+# 3. Générer puis appliquer la migration EF Core si besoin
 dotnet tool install --global dotnet-ef   # si pas déjà installé
-dotnet ef migrations add InitialCreate \
-  --project src/ArkCloud.Infrastructure \
-  --startup-project src/ArkCloud.API \
+dotnet ef migrations add InitialCreate `
+  --project backend/ArkCloud.Infrastructure `
+  --startup-project backend/ArkCloud.API `
   --output-dir Persistence/Migrations
 
-dotnet ef database update \
-  --project src/ArkCloud.Infrastructure \
-  --startup-project src/ArkCloud.API
+dotnet ef database update `
+  --project backend/ArkCloud.Infrastructure `
+  --startup-project backend/ArkCloud.API
 
 # 4. Lancer l'API
-dotnet run --project src/ArkCloud.API
-# Swagger : http://localhost:5080/swagger
+dotnet run --project backend/ArkCloud.API
+# Swagger : http://localhost:5280/swagger
+# https://localhost:5281;http://localhost:5280
+# dotnet run --project backend/ArkCloud.API --launch-profile https  
+
+# 5. Lancer le frontend Blazor (dans un autre terminal)
+dotnet run --project frontend/ArkCloud.Blazor
+# https://localhost:7050;http://localhost:5090
+# dotnet run --project frontend/ArkCloud.Blazor --launch-profile https
+
 ```
 
 ## Tests
-
 ```bash
-dotnet test
+dotnet test backend/tests/ArkCloud.Tests.Unit
+dotnet test backend/tests/ArkCloud.Tests.Integration
+dotnet test frontend/ArkCloud.Tests.Component
 ```
 
-Les tests d'intégration (`tests/ArkCloud.Tests.Integration`) utilisent Testcontainers : Docker doit tourner localement pour qu'ils passent.
+Les tests d'intégration (`backend/tests/ArkCloud.Tests.Integration`) utilisent Testcontainers : Docker doit tourner localement pour qu'ils passent.
 
-## Docker complet (API + PostgreSQL)
+`frontend/ArkCloud.Tests.Component` teste les composants Blazor avec bUnit (`Login`, `LogoutButton`, `NavMenu`) en passant par le vrai `JwtAuthenticationStateProvider`/`TokenStorageService` — seul l'appel HTTP vers l'API est remplacé par un faux handler, donc ni Docker ni une vraie API ne sont nécessaires pour les lancer.
+
+## Docker complet (API + Blazor + PostgreSQL)
 
 ```bash
+cp deploy/docker/.env.example deploy/docker/.env
+# éditer deploy/docker/.env et renseigner JWT_KEY (valeur aléatoire, 64+ caractères)
+
 docker compose -f deploy/docker/docker-compose.yml up --build
 ```
+
+## Données de test (seed)
+
+```bash
+Get-Content deploy/seed/seed_users.sql -Raw | docker exec -i arkcloud-postgres psql -U arkcloud -d arkcloud
+Get-Content deploy/seed/seed_catalog_and_orders.sql -Raw | docker exec -i arkcloud-postgres psql -U arkcloud -d arkcloud
+psql "Host=localhost;Port=5432;Database=arkcloud;Username=arkcloud;Password=arkcloud" -f deploy/seed/seed_users.sql
+psql "Host=localhost;Port=5432;Database=arkcloud;Username=arkcloud;Password=arkcloud" -f deploy/seed/seed_catalog_and_orders.sql
+```
+
+Scripts SQL idempotents (ids fixes + `ON CONFLICT DO NOTHING`, ré-exécutables sans risque) :
+
+- `deploy/seed/seed_users.sql` — 50 comptes (3 Admin, 7 Manager, 40 User), mot de passe commun `Sup3rSecret123!`. Couvre les cas métier réels de `AuthService` : compte désactivé, verrouillage actif, verrouillage expiré, tentatives échouées partielles, combinaison désactivé+verrouillé, rôles multiples.
+- `deploy/seed/seed_catalog_and_orders.sql` — 20 produits (5 catégories, stocks variés dont rupture à 0), 10 clients, 20 commandes avec order_items couvrant les 4 statuts (Draft/Submitted/Paid/Cancelled).
+
+## Secrets & configuration
+
+**Jamais commités** : clé de signature JWT, mots de passe de base de données, clés d'API, chaînes de connexion. `appsettings.json`/`appsettings.Development.json` ne contiennent que des valeurs vides ou des placeholders.
+
+- **Dev local (`dotnet run`)** : `dotnet user-secrets set "Jwt:Key" "<valeur aléatoire 64+ caractères>" --project backend/ArkCloud.API`. Stocké hors du repo (`%APPDATA%/Microsoft/UserSecrets` ou `~/.microsoft/usersecrets`), voir `UserSecretsId` dans le `.csproj`.
+- **Docker Compose** : `deploy/docker/.env` (gitignored, voir `.env.example`) — les conteneurs n'ont pas accès au store `user-secrets` de l'hôte.
+- **Production** : `Program.cs` active automatiquement Azure Key Vault dès que `KeyVault:Uri` est configuré (variable d'environnement / App Setting, jamais un fichier commité), via `DefaultAzureCredential` (identité managée en Azure). Les secrets du Key Vault utilisent `--` à la place de `:` (ex. secret `Jwt--Key` → configuration `Jwt:Key`). Tant que `KeyVault:Uri` n'est pas renseigné, ce code est un no-op — aucun Key Vault réel n'existe encore pour ce projet, c'est un pattern prêt à l'emploi.
+
+Pour activer réellement le Key Vault en prod : créer le vault, accorder à l'identité managée de l'App Service le rôle "Key Vault Secrets User", puis définir `KeyVault:Uri`. Aucun changement de code nécessaire.
 
 ## Endpoints
 
@@ -81,7 +98,10 @@ Toutes les erreurs sont renvoyées en `application/problem+json` avec un `traceI
 
 ## CI
 
-`.github/workflows/backend-ci.yml` : restore, build, test, publish, build de l'image Docker sur chaque push/PR vers `main`/`develop`.
+- `.github/workflows/backend-ci.yml` (déclenché sur `backend/**`) : restore, build, test, publish, build + push de l'image `ghcr.io/.../arkcloud-api` sur push vers `main`/`develop`.
+- `.github/workflows/frontend-ci.yml` (déclenché sur `frontend/**`) : restore, build, test (`ArkCloud.Tests.Component`, bUnit), publish, build + push de l'image `ghcr.io/.../arkcloud-frontend` sur push vers `main`/`develop`.
+
+Le Terraform (plan sur PR, apply sur merge, gate manuel pour prod) vit désormais dans le repo séparé `mon-projet-infra`.
 
 ## Checklist de vérification (à faire en local, non exécutable depuis cette sandbox)
 

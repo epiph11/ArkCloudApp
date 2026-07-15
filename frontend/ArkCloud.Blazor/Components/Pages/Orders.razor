@@ -1,0 +1,112 @@
+@page "/orders"
+@layout MainLayout
+@inject OrdersApiClient OrdersApi
+
+<PageTitle>Orders</PageTitle>
+
+<AuthorizeView>
+    <Authorized>
+        <h1>Orders</h1>
+
+        <div class="mb-3">
+            <a class="btn btn-primary" href="orders/new">New order</a>
+        </div>
+
+        <div class="mb-3">
+            <input class="form-control" placeholder="Search by customer, email, or status (Draft/Submitted/Paid/Cancelled)..."
+                   @bind="_search" @bind:event="oninput" @onkeyup="OnSearchKeyUp" />
+        </div>
+
+        <ErrorBanner Message="@_loadError" />
+
+        @if (_page is null && _loadError is null)
+        {
+            <LoadingSpinner />
+        }
+        else if (_page is not null && _page.Items.Count == 0)
+        {
+            <p>No orders found.</p>
+        }
+        else if (_page is not null)
+        {
+            <table class="table">
+                <thead>
+                    <tr>
+                        <th>Customer</th>
+                        <th>Status</th>
+                        <th>Total</th>
+                        <th></th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var order in _page.Items)
+                    {
+                        <tr>
+                            <td>@order.CustomerName</td>
+                            <td>@order.Status</td>
+                            <td>@order.TotalAmount.ToString("0.00")</td>
+                            <td><a href="@($"orders/{order.Id}")">View</a></td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+
+            <div class="mb-3">
+                <button class="btn" disabled="@(_page.Page <= 1)" @onclick="() => ChangePageAsync(_page.Page - 1)">Previous</button>
+                <span> Page @_page.Page of @Math.Max(_page.TotalPages, 1) (@_page.TotalCount total) </span>
+                <button class="btn" disabled="@(_page.Page >= _page.TotalPages)" @onclick="() => ChangePageAsync(_page.Page + 1)">Next</button>
+            </div>
+        }
+    </Authorized>
+    <NotAuthorized>
+        <RedirectToLogin />
+    </NotAuthorized>
+</AuthorizeView>
+
+@code {
+    private ArkCloud.Application.DTOs.PagedResult<ArkCloud.Application.DTOs.OrderResponse>? _page;
+    private string? _loadError;
+    private string _search = string.Empty;
+    private int _currentPage = 1;
+    private CancellationTokenSource? _debounce;
+
+    protected override Task OnInitializedAsync() => LoadAsync();
+
+    private async Task LoadAsync()
+    {
+        _loadError = null;
+        try
+        {
+            _page = await OrdersApi.GetPagedAsync(search: _search, page: _currentPage, pageSize: 20);
+        }
+        catch (HttpRequestException ex)
+        {
+            _loadError = $"Could not reach the API: {ex.Message}";
+        }
+    }
+
+    private async Task ChangePageAsync(int page)
+    {
+        _currentPage = page;
+        await LoadAsync();
+    }
+
+    private async Task OnSearchKeyUp(Microsoft.AspNetCore.Components.Web.KeyboardEventArgs e)
+    {
+        _debounce?.Cancel();
+        _debounce = new CancellationTokenSource();
+        var token = _debounce.Token;
+
+        try
+        {
+            await Task.Delay(300, token);
+        }
+        catch (TaskCanceledException)
+        {
+            return;
+        }
+
+        _currentPage = 1;
+        await LoadAsync();
+    }
+}

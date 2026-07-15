@@ -1,0 +1,165 @@
+@page "/"
+@layout MainLayout
+@inject DashboardApiClient DashboardApi
+
+<PageTitle>Dashboard</PageTitle>
+
+<AuthorizeView>
+    <Authorized>
+        <h1>Welcome, @context.User.Identity?.Name</h1>
+        <p>Role(s): @string.Join(", ", context.User.FindAll(System.Security.Claims.ClaimTypes.Role).Select(c => c.Value))</p>
+
+        @if (_loadError is not null)
+        {
+            <div class="alert alert-danger">@_loadError</div>
+        }
+        else if (_dashboard is null)
+        {
+            <p>Loading...</p>
+        }
+        else
+        {
+            <div class="stat-cards">
+                <div class="stat-card">
+                    <div class="stat-value">@_dashboard.TotalCustomers</div>
+                    <div class="stat-label">Customers</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-value">@_dashboard.TotalProducts</div>
+                    <div class="stat-label">Products</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-value">@_dashboard.TotalOrders</div>
+                    <div class="stat-label">Orders</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-value">@_dashboard.OrdersByStatus.Draft</div>
+                    <div class="stat-label">Draft orders</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-value">@_dashboard.OrdersByStatus.Submitted</div>
+                    <div class="stat-label">Submitted orders</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-value">@_dashboard.OrdersByStatus.Paid</div>
+                    <div class="stat-label">Paid orders</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-value">@_dashboard.OrdersByStatus.Cancelled</div>
+                    <div class="stat-label">Cancelled orders</div>
+                </div>
+            </div>
+
+            <div class="dashboard-widgets">
+                <div class="dashboard-widget">
+                    <h2>Latest customers</h2>
+                    @if (_dashboard.LatestCustomers.Count == 0)
+                    {
+                        <p>No customers yet.</p>
+                    }
+                    else
+                    {
+                        <table class="table">
+                            <thead>
+                                <tr>
+                                    <th>Name</th>
+                                    <th>Email</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                @foreach (var customer in _dashboard.LatestCustomers)
+                                {
+                                    <tr>
+                                        <td>@customer.FirstName @customer.LastName</td>
+                                        <td>@customer.Email</td>
+                                    </tr>
+                                }
+                            </tbody>
+                        </table>
+                    }
+                    <p><a href="customers">View all customers</a></p>
+                </div>
+
+                <div class="dashboard-widget">
+                    <h2>Latest products</h2>
+                    @if (_dashboard.LatestProducts.Count == 0)
+                    {
+                        <p>No products yet.</p>
+                    }
+                    else
+                    {
+                        <table class="table">
+                            <thead>
+                                <tr>
+                                    <th>Name</th>
+                                    <th>SKU</th>
+                                    <th>Price</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                @foreach (var product in _dashboard.LatestProducts)
+                                {
+                                    <tr>
+                                        <td>@product.Name</td>
+                                        <td>@product.Sku</td>
+                                        <td>@product.UnitPrice.ToString("0.00") @product.Currency</td>
+                                    </tr>
+                                }
+                            </tbody>
+                        </table>
+                    }
+                    <!-- No /products page yet — wire this up once it lands (Step 10). -->
+                </div>
+
+                <div class="dashboard-widget">
+                    <h2>Latest orders</h2>
+                    @if (_dashboard.LatestOrders.Count == 0)
+                    {
+                        <p>No orders yet.</p>
+                    }
+                    else
+                    {
+                        <table class="table">
+                            <thead>
+                                <tr>
+                                    <th>Status</th>
+                                    <th>Total</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                @foreach (var order in _dashboard.LatestOrders)
+                                {
+                                    <tr>
+                                        <td>@order.Status</td>
+                                        <td>@order.TotalAmount.ToString("0.00")</td>
+                                    </tr>
+                                }
+                            </tbody>
+                        </table>
+                    }
+                    <!-- No /orders page yet — wire this up once it lands (Step 11). -->
+                </div>
+            </div>
+        }
+    </Authorized>
+    <NotAuthorized>
+        <RedirectToLogin />
+    </NotAuthorized>
+</AuthorizeView>
+
+@code {
+    private ArkCloud.Application.DTOs.DashboardResponse? _dashboard;
+    private string? _loadError;
+
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            _dashboard = await DashboardApi.GetAsync();
+        }
+        catch (HttpRequestException ex)
+        {
+            _loadError = $"Could not reach the API: {ex.Message}";
+        }
+    }
+}

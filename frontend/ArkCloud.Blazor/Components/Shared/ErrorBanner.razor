@@ -1,0 +1,10 @@
+@if (!string.IsNullOrWhiteSpace(Message))
+{
+    <div class="alert alert-danger">@Message</div>
+}
+
+@code {
+    /// <summary>Nothing is rendered when this is null/blank, so callers can bind it unconditionally.</summary>
+    [Parameter]
+    public string? Message { get; set; }
+}

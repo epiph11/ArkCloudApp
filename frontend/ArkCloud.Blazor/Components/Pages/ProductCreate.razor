@@ -1,0 +1,118 @@
+@page "/products/new"
+@layout MainLayout
+@inject ProductsApiClient ProductsApi
+@inject NavigationManager Navigation
+
+<PageTitle>New product</PageTitle>
+
+<AuthorizeView Context="authState">
+    <Authorized>
+        <h1>New product</h1>
+
+        <EditForm Model="_model" OnValidSubmit="HandleSaveAsync">
+            <DataAnnotationsValidator />
+            <ValidationSummary />
+
+            <div class="mb-3">
+                <label>Name</label>
+                <InputText class="form-control" @bind-Value="_model.Name" />
+            </div>
+
+            <div class="mb-3">
+                <label>SKU</label>
+                <InputText class="form-control" @bind-Value="_model.Sku" />
+            </div>
+
+            <div class="mb-3">
+                <label>Category</label>
+                <InputText class="form-control" @bind-Value="_model.Category" />
+            </div>
+
+            <div class="mb-3">
+                <label>Unit price</label>
+                <InputNumber class="form-control" @bind-Value="_model.UnitPrice" step="0.01" />
+            </div>
+
+            <div class="mb-3">
+                <label>Currency (3-letter code)</label>
+                <InputText class="form-control" @bind-Value="_model.Currency" />
+            </div>
+
+            <div class="mb-3">
+                <label>Stock</label>
+                <InputNumber class="form-control" @bind-Value="_model.Stock" />
+            </div>
+
+            @if (!string.IsNullOrWhiteSpace(_errorMessage))
+            {
+                <div class="alert alert-danger">@_errorMessage</div>
+            }
+
+            <button type="submit" class="btn btn-primary" disabled="@_isBusy">Create</button>
+            <a class="btn btn-link" href="products">Cancel</a>
+        </EditForm>
+    </Authorized>
+    <NotAuthorized>
+        <RedirectToLogin />
+    </NotAuthorized>
+</AuthorizeView>
+
+@code {
+    private readonly CreateModel _model = new();
+    private string? _errorMessage;
+    private bool _isBusy;
+
+    private async Task HandleSaveAsync()
+    {
+        _isBusy = true;
+        _errorMessage = null;
+
+        try
+        {
+            var result = await ProductsApi.CreateAsync(new ArkCloud.Application.DTOs.CreateProductRequest
+            {
+                Name = _model.Name,
+                Sku = _model.Sku,
+                Category = _model.Category,
+                UnitPrice = _model.UnitPrice,
+                Currency = _model.Currency,
+                Stock = _model.Stock
+            });
+
+            Navigation.NavigateTo($"products/{result.Id}");
+        }
+        catch (Exception ex)
+        {
+            _errorMessage = ex.Message;
+        }
+        finally
+        {
+            _isBusy = false;
+        }
+    }
+
+    private class CreateModel
+    {
+        [System.ComponentModel.DataAnnotations.Required]
+        [System.ComponentModel.DataAnnotations.StringLength(150)]
+        public string Name { get; set; } = string.Empty;
+
+        [System.ComponentModel.DataAnnotations.Required]
+        [System.ComponentModel.DataAnnotations.StringLength(50)]
+        public string Sku { get; set; } = string.Empty;
+
+        [System.ComponentModel.DataAnnotations.Required]
+        [System.ComponentModel.DataAnnotations.StringLength(100)]
+        public string Category { get; set; } = string.Empty;
+
+        [System.ComponentModel.DataAnnotations.Range(0.01, double.MaxValue, ErrorMessage = "Unit price must be greater than 0.")]
+        public decimal UnitPrice { get; set; }
+
+        [System.ComponentModel.DataAnnotations.Required]
+        [System.ComponentModel.DataAnnotations.StringLength(3, MinimumLength = 3, ErrorMessage = "Currency must be a 3-letter code.")]
+        public string Currency { get; set; } = "EUR";
+
+        [System.ComponentModel.DataAnnotations.Range(0, int.MaxValue, ErrorMessage = "Stock cannot be negative.")]
+        public int Stock { get; set; }
+    }
+}

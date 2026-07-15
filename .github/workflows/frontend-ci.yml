@@ -1,0 +1,76 @@
+name: frontend-ci
+
+on:
+  push:
+    branches: [main, develop]
+    paths:
+      - "frontend/**"
+      - ".github/workflows/frontend-ci.yml"
+  pull_request:
+    branches: [main, develop]
+    paths:
+      - "frontend/**"
+      - ".github/workflows/frontend-ci.yml"
+
+permissions:
+  contents: read
+  packages: write
+
+env:
+  IMAGE_NAME: ghcr.io/${{ github.repository_owner }}/arkcloud-frontend
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 10.0.x
+
+      # ArkCloud.Blazor references ArkCloud.Application (shared DTOs) from ../backend,
+      # so the full repo checkout above is required even though this workflow is
+      # scoped to frontend/** changes.
+      - name: Restore
+        run: |
+          dotnet restore frontend/ArkCloud.Blazor/ArkCloud.Blazor.csproj
+          dotnet restore frontend/ArkCloud.Tests.Component/ArkCloud.Tests.Component.csproj
+
+      - name: Build
+        run: |
+          dotnet build frontend/ArkCloud.Blazor/ArkCloud.Blazor.csproj --no-restore --configuration Release
+          dotnet build frontend/ArkCloud.Tests.Component/ArkCloud.Tests.Component.csproj --no-restore --configuration Release
+
+      - name: Test
+        run: dotnet test frontend/ArkCloud.Tests.Component/ArkCloud.Tests.Component.csproj --no-build --configuration Release --logger trx --results-directory ./TestResults
+
+      - name: Upload test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: frontend-test-results
+          path: ./TestResults
+
+      - name: Publish Blazor app
+        run: dotnet publish frontend/ArkCloud.Blazor/ArkCloud.Blazor.csproj -c Release -o ./publish
+
+      - name: Build Docker image
+        run: docker build -f frontend/ArkCloud.Blazor/Dockerfile -t ${{ env.IMAGE_NAME }}:${{ github.sha }} -t ${{ env.IMAGE_NAME }}:latest .
+
+      - name: Log in to GHCR
+        if: github.event_name == 'push'
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Push Docker image
+        if: github.event_name == 'push'
+        run: |
+          docker push ${{ env.IMAGE_NAME }}:${{ github.sha }}
+          docker push ${{ env.IMAGE_NAME }}:latest

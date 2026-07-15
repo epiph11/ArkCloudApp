@@ -1,0 +1,124 @@
+@page "/orders/new"
+@layout MainLayout
+@inject OrdersApiClient OrdersApi
+@inject NavigationManager Navigation
+
+<PageTitle>New order</PageTitle>
+
+<AuthorizeView Context="authState">
+    <Authorized>
+        <h1>New order</h1>
+
+        <h2>1. Customer</h2>
+        <CustomerSearch OnSelected="OnCustomerSelected" />
+
+        <h2>2. Products</h2>
+        <ProductPicker OnAdd="OnProductAddedAsync" />
+
+        @if (_items.Count > 0)
+        {
+            <table class="table">
+                <thead>
+                    <tr>
+                        <th>Product</th>
+                        <th>Quantity</th>
+                        <th>Unit price</th>
+                        <th>Line total</th>
+                        <th></th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var item in _items)
+                    {
+                        <tr>
+                            <td>@item.Product.Name</td>
+                            <td>@item.Quantity</td>
+                            <td>@item.Product.UnitPrice.ToString("0.00") @item.Product.Currency</td>
+                            <td>@((item.Product.UnitPrice * item.Quantity).ToString("0.00"))</td>
+                            <td><button type="button" class="btn btn-link" @onclick="() => RemoveItem(item)">Remove</button></td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+
+            <p><strong>Total: @_items.Sum(i => i.Product.UnitPrice * i.Quantity).ToString("0.00")</strong></p>
+        }
+        else
+        {
+            <p>No products added yet.</p>
+        }
+
+        <ErrorBanner Message="@_errorMessage" />
+
+        <div class="mb-3">
+            <button class="btn btn-primary" @onclick="CreateAsync" disabled="@(!CanCreate || _isBusy)">Create order</button>
+            <a class="btn btn-link" href="orders">Cancel</a>
+        </div>
+    </Authorized>
+    <NotAuthorized>
+        <RedirectToLogin />
+    </NotAuthorized>
+</AuthorizeView>
+
+@code {
+    private ArkCloud.Application.DTOs.CustomerResponse? _customer;
+    private readonly List<ProductPicker.ProductSelection> _items = [];
+    private string? _errorMessage;
+    private bool _isBusy;
+
+    private bool CanCreate => _customer is not null && _items.Count > 0;
+
+    private void OnCustomerSelected(ArkCloud.Application.DTOs.CustomerResponse customer)
+    {
+        _customer = customer;
+    }
+
+    private Task OnProductAddedAsync(ProductPicker.ProductSelection selection)
+    {
+        // Adding the same product twice just bumps its quantity rather than creating a duplicate row.
+        var existing = _items.FirstOrDefault(i => i.Product.Id == selection.Product.Id);
+        if (existing is not null)
+        {
+            _items.Remove(existing);
+            _items.Add(existing with { Quantity = existing.Quantity + selection.Quantity });
+        }
+        else
+        {
+            _items.Add(selection);
+        }
+
+        return Task.CompletedTask;
+    }
+
+    private void RemoveItem(ProductPicker.ProductSelection item) => _items.Remove(item);
+
+    private async Task CreateAsync()
+    {
+        if (!CanCreate)
+            return;
+
+        _isBusy = true;
+        _errorMessage = null;
+
+        try
+        {
+            var result = await OrdersApi.CreateAsync(new ArkCloud.Application.DTOs.CreateOrderRequest
+            {
+                CustomerId = _customer!.Id,
+                Items = _items
+                    .Select(i => new ArkCloud.Application.DTOs.CreateOrderItemRequest { ProductId = i.Product.Id, Quantity = i.Quantity })
+                    .ToList()
+            });
+
+            Navigation.NavigateTo($"orders/{result.Id}");
+        }
+        catch (Exception ex)
+        {
+            _errorMessage = ex.Message;
+        }
+        finally
+        {
+            _isBusy = false;
+        }
+    }
+}

@@ -1,0 +1,28 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <LangVersion>latest</LangVersion>
+    <AnalysisLevel>latest</AnalysisLevel>
+    <TreatWarningsAsErrors>false</TreatWarningsAsErrors>
+    <RootNamespace>ArkCloud.Blazor</RootNamespace>
+    <UserSecretsId>arkcloud-blazor-secrets</UserSecretsId>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- Used client-side only to read claims out of the stored JWT for <AuthorizeView> /
+         [Authorize] UI state. The signature is never trusted client-side — see the remarks
+         on JwtAuthenticationStateProvider. -->
+    <PackageReference Include="System.IdentityModel.Tokens.Jwt" Version="8.14.0" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- Reuses the Application layer's DTOs (RegisterRequest, LoginRequest, AuthResponse,
+         CustomerResponse, ...) as the wire contract for talking to ArkCloud.API over HTTP.
+         The Blazor project never references Infrastructure or talks to the database directly. -->
+    <ProjectReference Include="..\..\backend\ArkCloud.Application\ArkCloud.Application.csproj" />
+  </ItemGroup>
+
+</Project>

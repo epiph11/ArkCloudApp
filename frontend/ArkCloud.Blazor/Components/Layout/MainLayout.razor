@@ -1,0 +1,29 @@
+@inherits LayoutComponentBase
+
+<div class="page">
+    <header class="top-nav px-4">
+        <NavMenu />
+
+        <div class="top-nav-actions">
+            <AuthorizeView>
+                <Authorized>
+                    <span class="user-info">
+                        @context.User.Identity?.Name
+                        (@string.Join(", ", context.User.FindAll(System.Security.Claims.ClaimTypes.Role).Select(c => c.Value)))
+                    </span>
+                    <LogoutButton />
+                </Authorized>
+                <NotAuthorized>
+                    <a href="login">Login</a>
+                    <a href="register">Register</a>
+                </NotAuthorized>
+            </AuthorizeView>
+        </div>
+    </header>
+
+    <main>
+        <article class="content px-4">
+            @Body
+        </article>
+    </main>
+</div>

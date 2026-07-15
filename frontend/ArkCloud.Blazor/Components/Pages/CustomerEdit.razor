@@ -1,0 +1,164 @@
+@page "/customers/{Id:guid}/edit"
+@layout MainLayout
+@inject CustomersApiClient CustomersApi
+@inject NavigationManager Navigation
+
+<PageTitle>Edit customer</PageTitle>
+
+<AuthorizeView Context="authState">
+    <Authorized>
+        <h1>Edit customer</h1>
+
+        @if (_loadError is not null)
+        {
+            <div class="alert alert-danger">@_loadError</div>
+        }
+        else if (_model is null)
+        {
+            <p>Loading...</p>
+        }
+        else
+        {
+            <EditForm Model="_model" OnValidSubmit="HandleSaveAsync">
+                <DataAnnotationsValidator />
+                <ValidationSummary />
+
+                <div class="mb-3">
+                    <label>First name</label>
+                    <InputText class="form-control" @bind-Value="_model.FirstName" />
+                </div>
+
+                <div class="mb-3">
+                    <label>Last name</label>
+                    <InputText class="form-control" @bind-Value="_model.LastName" />
+                </div>
+
+                <div class="mb-3">
+                    <label>Email</label>
+                    <InputText class="form-control" @bind-Value="_model.Email" />
+                </div>
+
+                <div class="mb-3">
+                    <label>Street</label>
+                    <InputText class="form-control" @bind-Value="_model.Street" />
+                </div>
+
+                <div class="mb-3">
+                    <label>City</label>
+                    <InputText class="form-control" @bind-Value="_model.City" />
+                </div>
+
+                <div class="mb-3">
+                    <label>Country</label>
+                    <InputText class="form-control" @bind-Value="_model.Country" />
+                </div>
+
+                @if (!string.IsNullOrWhiteSpace(_errorMessage))
+                {
+                    <div class="alert alert-danger">@_errorMessage</div>
+                }
+
+                <button type="submit" class="btn btn-primary" disabled="@_isBusy">Save</button>
+                <a class="btn btn-link" href="@($"customers/{Id}")">Cancel</a>
+            </EditForm>
+        }
+    </Authorized>
+    <NotAuthorized>
+        <RedirectToLogin />
+    </NotAuthorized>
+</AuthorizeView>
+
+@code {
+    [Parameter]
+    public Guid Id { get; set; }
+
+    private EditModel? _model;
+    private string? _loadError;
+    private string? _errorMessage;
+    private bool _isBusy;
+
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            var customer = await CustomersApi.GetByIdAsync(Id);
+            if (customer is null)
+            {
+                _loadError = "Customer not found.";
+                return;
+            }
+
+            _model = new EditModel
+            {
+                FirstName = customer.FirstName,
+                LastName = customer.LastName,
+                Email = customer.Email,
+                Street = customer.Street,
+                City = customer.City,
+                Country = customer.Country
+            };
+        }
+        catch (HttpRequestException ex) when (ex.StatusCode == System.Net.HttpStatusCode.NotFound)
+        {
+            _loadError = "Customer not found.";
+        }
+        catch (HttpRequestException ex)
+        {
+            _loadError = $"Could not reach the API: {ex.Message}";
+        }
+    }
+
+    private async Task HandleSaveAsync()
+    {
+        if (_model is null)
+            return;
+
+        _isBusy = true;
+        _errorMessage = null;
+
+        try
+        {
+            await CustomersApi.UpdateAsync(Id, new ArkCloud.Application.DTOs.UpdateCustomerRequest
+            {
+                FirstName = _model.FirstName,
+                LastName = _model.LastName,
+                Email = _model.Email,
+                Street = _model.Street,
+                City = _model.City,
+                Country = _model.Country
+            });
+
+            Navigation.NavigateTo($"customers/{Id}");
+        }
+        catch (Exception ex)
+        {
+            _errorMessage = ex.Message;
+        }
+        finally
+        {
+            _isBusy = false;
+        }
+    }
+
+    private class EditModel
+    {
+        [System.ComponentModel.DataAnnotations.Required]
+        public string FirstName { get; set; } = string.Empty;
+
+        [System.ComponentModel.DataAnnotations.Required]
+        public string LastName { get; set; } = string.Empty;
+
+        [System.ComponentModel.DataAnnotations.Required]
+        [System.ComponentModel.DataAnnotations.EmailAddress]
+        public string Email { get; set; } = string.Empty;
+
+        [System.ComponentModel.DataAnnotations.Required]
+        public string Street { get; set; } = string.Empty;
+
+        [System.ComponentModel.DataAnnotations.Required]
+        public string City { get; set; } = string.Empty;
+
+        [System.ComponentModel.DataAnnotations.Required]
+        public string Country { get; set; } = string.Empty;
+    }
+}

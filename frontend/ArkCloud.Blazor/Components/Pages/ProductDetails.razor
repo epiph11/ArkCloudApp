@@ -1,0 +1,104 @@
+@page "/products/{Id:guid}"
+@layout MainLayout
+@inject ProductsApiClient ProductsApi
+@inject NavigationManager Navigation
+
+<PageTitle>Product details</PageTitle>
+
+<AuthorizeView>
+    <Authorized>
+        @if (_loadError is not null)
+        {
+            <div class="alert alert-danger">@_loadError</div>
+        }
+        else if (_product is null)
+        {
+            <p>Loading...</p>
+        }
+        else
+        {
+            <h1>@_product.Name</h1>
+
+            <table class="table">
+                <tbody>
+                    <tr><th>SKU</th><td>@_product.Sku</td></tr>
+                    <tr><th>Category</th><td>@_product.Category</td></tr>
+                    <tr><th>Price</th><td>@_product.UnitPrice.ToString("0.00") @_product.Currency</td></tr>
+                    <tr><th>Stock</th><td>@_product.Stock</td></tr>
+                </tbody>
+            </table>
+
+            @if (_deleteError is not null)
+            {
+                <div class="alert alert-danger">@_deleteError</div>
+            }
+
+            <div class="mb-3">
+                <AuthorizeView Roles="Admin,Manager" Context="manageContext">
+                    <Authorized>
+                        <a class="btn btn-primary" href="@($"products/{_product.Id}/edit")">Edit</a>
+
+                        @if (_confirmingDelete)
+                        {
+                            <button class="btn" @onclick="DeleteAsync">Confirm delete?</button>
+                            <button class="btn btn-link" @onclick="() => _confirmingDelete = false">Cancel</button>
+                        }
+                        else
+                        {
+                            <button class="btn btn-link" @onclick="() => _confirmingDelete = true">Delete</button>
+                        }
+                    </Authorized>
+                </AuthorizeView>
+
+                <a class="btn btn-link" href="products">Back to list</a>
+            </div>
+        }
+    </Authorized>
+    <NotAuthorized>
+        <RedirectToLogin />
+    </NotAuthorized>
+</AuthorizeView>
+
+@code {
+    [Parameter]
+    public Guid Id { get; set; }
+
+    private ArkCloud.Application.DTOs.ProductResponse? _product;
+    private string? _loadError;
+    private string? _deleteError;
+    private bool _confirmingDelete;
+
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            _product = await ProductsApi.GetByIdAsync(Id);
+            if (_product is null)
+                _loadError = "Product not found.";
+        }
+        catch (HttpRequestException ex) when (ex.StatusCode == System.Net.HttpStatusCode.NotFound)
+        {
+            _loadError = "Product not found.";
+        }
+        catch (HttpRequestException ex)
+        {
+            _loadError = $"Could not reach the API: {ex.Message}";
+        }
+    }
+
+    private async Task DeleteAsync()
+    {
+        _deleteError = null;
+
+        try
+        {
+            await ProductsApi.DeleteAsync(Id);
+            Navigation.NavigateTo("products");
+        }
+        catch (Exception ex)
+        {
+            _deleteError = ex.Message;
+            _confirmingDelete = false;
+        }
+    }
+}

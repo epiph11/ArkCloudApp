@@ -1,0 +1,175 @@
+@page "/products/{Id:guid}/edit"
+@layout MainLayout
+@inject ProductsApiClient ProductsApi
+@inject NavigationManager Navigation
+
+<PageTitle>Edit product</PageTitle>
+
+<AuthorizeView Context="topLevelAuthState">
+    <Authorized>
+        <AuthorizeView Roles="Admin,Manager" Context="authState">
+            <Authorized>
+                <h1>Edit product</h1>
+
+                @if (_loadError is not null)
+                {
+                    <div class="alert alert-danger">@_loadError</div>
+                }
+                else if (_model is null)
+                {
+                    <p>Loading...</p>
+                }
+                else
+                {
+                    <EditForm Model="_model" OnValidSubmit="HandleSaveAsync">
+                        <DataAnnotationsValidator />
+                        <ValidationSummary />
+
+                        <div class="mb-3">
+                            <label>Name</label>
+                            <InputText class="form-control" @bind-Value="_model.Name" />
+                        </div>
+
+                        <div class="mb-3">
+                            <label>SKU</label>
+                            <InputText class="form-control" @bind-Value="_model.Sku" />
+                        </div>
+
+                        <div class="mb-3">
+                            <label>Category</label>
+                            <InputText class="form-control" @bind-Value="_model.Category" />
+                        </div>
+
+                        <div class="mb-3">
+                            <label>Unit price</label>
+                            <InputNumber class="form-control" @bind-Value="_model.UnitPrice" step="0.01" />
+                        </div>
+
+                        <div class="mb-3">
+                            <label>Currency (3-letter code)</label>
+                            <InputText class="form-control" @bind-Value="_model.Currency" />
+                        </div>
+
+                        <div class="mb-3">
+                            <label>Stock</label>
+                            <InputNumber class="form-control" @bind-Value="_model.Stock" />
+                        </div>
+
+                        @if (!string.IsNullOrWhiteSpace(_errorMessage))
+                        {
+                            <div class="alert alert-danger">@_errorMessage</div>
+                        }
+
+                        <button type="submit" class="btn btn-primary" disabled="@_isBusy">Save</button>
+                        <a class="btn btn-link" href="@($"products/{Id}")">Cancel</a>
+                    </EditForm>
+                }
+            </Authorized>
+            <NotAuthorized>
+                <div class="alert alert-danger">You don't have permission to edit products.</div>
+                <a class="btn btn-link" href="@($"products/{Id}")">Back to product</a>
+            </NotAuthorized>
+        </AuthorizeView>
+    </Authorized>
+    <NotAuthorized>
+        <RedirectToLogin />
+    </NotAuthorized>
+</AuthorizeView>
+
+@code {
+    [Parameter]
+    public Guid Id { get; set; }
+
+    private EditModel? _model;
+    private string? _loadError;
+    private string? _errorMessage;
+    private bool _isBusy;
+
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            var product = await ProductsApi.GetByIdAsync(Id);
+            if (product is null)
+            {
+                _loadError = "Product not found.";
+                return;
+            }
+
+            _model = new EditModel
+            {
+                Name = product.Name,
+                Sku = product.Sku,
+                Category = product.Category,
+                UnitPrice = product.UnitPrice,
+                Currency = product.Currency,
+                Stock = product.Stock
+            };
+        }
+        catch (HttpRequestException ex) when (ex.StatusCode == System.Net.HttpStatusCode.NotFound)
+        {
+            _loadError = "Product not found.";
+        }
+        catch (HttpRequestException ex)
+        {
+            _loadError = $"Could not reach the API: {ex.Message}";
+        }
+    }
+
+    private async Task HandleSaveAsync()
+    {
+        if (_model is null)
+            return;
+
+        _isBusy = true;
+        _errorMessage = null;
+
+        try
+        {
+            await ProductsApi.UpdateAsync(Id, new ArkCloud.Application.DTOs.UpdateProductRequest
+            {
+                Name = _model.Name,
+                Sku = _model.Sku,
+                Category = _model.Category,
+                UnitPrice = _model.UnitPrice,
+                Currency = _model.Currency,
+                Stock = _model.Stock
+            });
+
+            Navigation.NavigateTo($"products/{Id}");
+        }
+        catch (Exception ex)
+        {
+            _errorMessage = ex.Message;
+        }
+        finally
+        {
+            _isBusy = false;
+        }
+    }
+
+    private class EditModel
+    {
+        [System.ComponentModel.DataAnnotations.Required]
+        [System.ComponentModel.DataAnnotations.StringLength(150)]
+        public string Name { get; set; } = string.Empty;
+
+        [System.ComponentModel.DataAnnotations.Required]
+        [System.ComponentModel.DataAnnotations.StringLength(50)]
+        public string Sku { get; set; } = string.Empty;
+
+        [System.ComponentModel.DataAnnotations.Required]
+        [System.ComponentModel.DataAnnotations.StringLength(100)]
+        public string Category { get; set; } = string.Empty;
+
+        [System.ComponentModel.DataAnnotations.Range(0.01, double.MaxValue, ErrorMessage = "Unit price must be greater than 0.")]
+        public decimal UnitPrice { get; set; }
+
+        [System.ComponentModel.DataAnnotations.Required]
+        [System.ComponentModel.DataAnnotations.StringLength(3, MinimumLength = 3, ErrorMessage = "Currency must be a 3-letter code.")]
+        public string Currency { get; set; } = string.Empty;
+
+        [System.ComponentModel.DataAnnotations.Range(0, int.MaxValue, ErrorMessage = "Stock cannot be negative.")]
+        public int Stock { get; set; }
+    }
+}
