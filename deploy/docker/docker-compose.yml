@@ -19,7 +19,7 @@ services:
   api:
     build:
       context: ../..
-      dockerfile: backend/ArkCloud.API/Dockerfile
+      dockerfile: deploy/docker/Dockerfile.api
     container_name: arkcloud-api
     environment:
       ASPNETCORE_ENVIRONMENT: Development
@@ -38,7 +38,7 @@ services:
   blazor:
     build:
       context: ../..
-      dockerfile: frontend/ArkCloud.Blazor/Dockerfile
+      dockerfile: deploy/docker/Dockerfile.blazor
     container_name: arkcloud-blazor
     environment:
       ASPNETCORE_ENVIRONMENT: Development

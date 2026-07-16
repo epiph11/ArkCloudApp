@@ -9,7 +9,7 @@
 | Sujet | Doc originale | Décision retenue |
 |---|---|---|
 | Structure du code applicatif | `src/ArkCloud.API`, `src/ArkCloud.Blazor`, etc. | **Inchangé : `backend/` + `frontend/`** — la restructuration a déjà eu lieu, tous les chemins CI/`.sln`/Dockerfiles/docker-compose y sont câblés. Repartir sur `src/` serait un renommage sans valeur ajoutée. |
-| Emplacement Terraform | `ArkCloud/deploy/terraform/` (monorepo) | **Repo séparé `mon-projet-infra`**, avec la même structure de modules/environnements que celle proposée. CI/CD et permissions restent distincts du repo applicatif (blast radius, gouvernance des changements infra vs code). |
+| Emplacement Terraform | `ArkCloud/deploy/terraform/` (monorepo) | **Repo séparé `ArkCloudInfra`**, avec la même structure de modules/environnements que celle proposée. CI/CD et permissions restent distincts du repo applicatif (blast radius, gouvernance des changements infra vs code). |
 | Registre d'images/packages | Non spécifié (implicitement ACR/ECR) | **JFrog Artifactory**, introduit en fin de Sprint 4 / début Sprint 5, comme registre unique multi-cloud (remplace GHCR et évite de dupliquer ACR + ECR). Swap de configuration CI, pas de refonte de code. |
 | Jenkins | Non mentionné | Évalué **en parallèle de GitHub Actions à partir du Sprint 9** (Kubernetes) — pas avant, tant que les cibles restent PaaS/serverless (App Service, ECS Fargate) où GH Actions suffit. Un seul pipeline porté en test, sans rien couper côté GH Actions. |
 | Puppet / Chef | Non mentionné | **Écartés du roadmap.** Aucune VM longue durée à maintenir dans ce plan (App Service = PaaS, ECS Fargate = serverless, EKS/AKS = nodes managés) : pas de terrain d'usage réel pour un outil de config management. |
@@ -42,8 +42,8 @@
 ArkCloud/
 │
 ├── .github/workflows/
-│   ├── backend-ci.yml
-│   └── frontend-ci.yml
+│   ├── arkcloud-backend-ci.yml
+│   └── arkcloud-frontend-ci.yml
 │
 ├── deploy/
 │   ├── docker/
@@ -70,10 +70,10 @@ ArkCloud/
 
 > **Objectif inchangé** : faire évoluer Infrastructure, Applications et DevOps indépendamment. Sauf que "Infrastructure" (Terraform) vit dans son propre repo plutôt que sous `deploy/`.
 
-**Structure cible pour `mon-projet-infra` (repo séparé) :**
+**Structure cible pour `ArkCloudInfra` (repo séparé) :**
 
 ```
-mon-projet-infra/
+ArkCloudInfra/
 │
 ├── .github/workflows/
 │   └── terraform-ci.yml       (existe déjà — plan sur PR, apply sur merge, gate manuel prod)
@@ -150,7 +150,7 @@ helm version
 
 ## Step 3 — Configuration Terraform (racine par environnement)
 
-Dans `mon-projet-infra/environments/<env>/`, chaque environnement contient :
+Dans `ArkCloudInfra/environments/<env>/`, chaque environnement contient :
 
 ```
 versions.tf
@@ -257,14 +257,18 @@ Déployer dans cet ordre :
 
 ### 7.2 Virtual Network
 `10.10.0.0/16`, avec subnets :
-- Application : `10.10.1.0/24`
-- Database : `10.10.2.0/24`
-- Private Endpoint : `10.10.3.0/24`
+- `snet-api` (`10.10.1.0/24`) — intégration VNet sortante pour le Plan d'`ArkCloud.API`, seul autorisé à atteindre la base.
+- `snet-web` (`10.10.4.0/24`) — intégration VNet sortante pour le Plan d'`ArkCloud.Blazor`. Séparé de `snet-api` : Azure lie un subnet d'intégration VNet à un seul App Service Plan, donc API et Blazor (deux Plans distincts) ne peuvent pas partager un subnet.
+- `snet-database` (`10.10.2.0/24`) — délégué à PostgreSQL Flexible Server.
+- `snet-private-endpoint` (`10.10.3.0/24`) — réservé, private endpoints (Key Vault, storage) à venir en durcissement (Sprint 6).
+
+> Correction apportée en session : la première version ne comptait qu'un seul `snet-app` partagé par API et Blazor — mélangeant deux Plans distincts sur un même subnet, ce qu'Azure interdit techniquement, et n'exprimant pas la vraie frontière de confiance (Blazor ne doit jamais parler à PostgreSQL directement).
 
 ### 7.3 Network Security Groups
-- Application : autoriser HTTPS
-- Database : autoriser PostgreSQL
-- Tout le reste : refusé
+- `nsg-api` : pas de règle entrante custom (l'intégration VNet est sortante uniquement, rien n'écoute d'entrant sur ce subnet) — laissé en place pour durcissement futur (Sprint 6).
+- `nsg-web` : `Deny` explicite en sortant sur `5432` vers `snet-database` — défense en profondeur, rend la règle "Blazor ne parle jamais à PostgreSQL" vérifiable au niveau réseau, pas juste une convention de code.
+- `nsg-database` : `Allow` entrant `5432` uniquement depuis `snet-api`.
+- Tout le reste : refusé (règles implicites Azure).
 
 ### 7.4 PostgreSQL Flexible Server
 - PostgreSQL 16
@@ -311,7 +315,7 @@ docker-compose.override.yml
 
 Conteneuriser `ArkCloud.API` et `ArkCloud.Blazor` avec : build multi-stage, utilisateur non-root, healthcheck, variables d'environnement.
 
-> Les Dockerfiles vivent actuellement dans `backend/ArkCloud.API/` et `frontend/ArkCloud.Blazor/` (référencés depuis `docker-compose.yml`). Les déplacer sous `deploy/docker/` avec des noms explicites (`Dockerfile.api`/`Dockerfile.blazor`) est une amélioration à faire dans le cadre de ce sprint.
+> ✅ Fait — les Dockerfiles vivaient dans `backend/ArkCloud.API/` et `frontend/ArkCloud.Blazor/`, déplacés sous `deploy/docker/Dockerfile.api` / `Dockerfile.blazor`. `docker-compose.yml` et les deux workflows (`arkcloud-backend-ci.yml`, `arkcloud-frontend-ci.yml`) mis à jour en conséquence. Le contenu des Dockerfiles n'a pas changé — seul l'emplacement/nom du fichier, le contexte de build reste la racine du repo (`COPY . .` s'appuie dessus, pas sur l'emplacement du Dockerfile).
 
 ---
 
@@ -400,16 +404,18 @@ ArkCloud.API                    ArkCloud.API
 
 ## Step 14 — CI/CD
 
-Dans `.github/workflows/` (réparti entre les deux repos, vu la séparation ArkCloud / mon-projet-infra) :
+Dans `.github/workflows/` (réparti entre les deux repos, vu la séparation ArkCloud / ArkCloudInfra) :
 
 **Côté ArkCloud :**
 ```
-backend-ci.yml       (existe — restore/build/test/publish/push image)
-frontend-ci.yml      (existe)
+arkcloud-backend-ci.yml       (existe — restore/build/test/publish/push image)
+arkcloud-frontend-ci.yml      (existe)
 ```
-À enrichir : scan Trivy de l'image avant push, déclenchement cross-repo vers `mon-projet-infra` (ex. `repository_dispatch`) pour lancer le déploiement du nouveau tag d'image.
+> ✅ Fait — scan Trivy (`aquasecurity/trivy-action@0.36.0`) ajouté juste après le build de l'image, avant tout push : `CRITICAL`/`HIGH` avec correctif disponible font échouer le job (`ignore-unfixed: true`, `exit-code: "1"`).
 
-**Côté mon-projet-infra :**
+À enrichir : déclenchement cross-repo vers `ArkCloudInfra` (ex. `repository_dispatch`) pour lancer le déploiement du nouveau tag d'image.
+
+**Côté ArkCloudInfra :**
 ```
 terraform-ci.yml     (existe — à enrichir avec tflint + checkov + terraform plan/PR, apply/merge gated)
 ```
@@ -492,4 +498,4 @@ Développeur → Git Push → Restore → Build → Tests unitaires
 
 ---
 
-*Ce roadmap garde l'application (`ArkCloud.API`, `ArkCloud.Blazor`, `ArkCloud.Application`, `ArkCloud.Domain`, `ArkCloud.Infrastructure`) séparée des assets de déploiement (`deploy/docker`, `deploy/kubernetes`) dans le repo ArkCloud, et de l'infrastructure cloud (Terraform) dans `mon-projet-infra`. Il laisse la place pour évoluer d'App Service → AKS/EKS, Docker → Kubernetes, et single-cloud → multi-cloud sans avoir à restructurer les repos plus tard.*
+*Ce roadmap garde l'application (`ArkCloud.API`, `ArkCloud.Blazor`, `ArkCloud.Application`, `ArkCloud.Domain`, `ArkCloud.Infrastructure`) séparée des assets de déploiement (`deploy/docker`, `deploy/kubernetes`) dans le repo ArkCloud, et de l'infrastructure cloud (Terraform) dans `ArkCloudInfra`. Il laisse la place pour évoluer d'App Service → AKS/EKS, Docker → Kubernetes, et single-cloud → multi-cloud sans avoir à restructurer les repos plus tard.*

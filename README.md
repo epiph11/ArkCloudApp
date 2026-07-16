@@ -98,10 +98,10 @@ Toutes les erreurs sont renvoyées en `application/problem+json` avec un `traceI
 
 ## CI
 
-- `.github/workflows/backend-ci.yml` (déclenché sur `backend/**`) : restore, build, test, publish, build + push de l'image `ghcr.io/.../arkcloud-api` sur push vers `main`/`develop`.
-- `.github/workflows/frontend-ci.yml` (déclenché sur `frontend/**`) : restore, build, test (`ArkCloud.Tests.Component`, bUnit), publish, build + push de l'image `ghcr.io/.../arkcloud-frontend` sur push vers `main`/`develop`.
+- `.github/workflows/arkcloud-backend-ci.yml` (déclenché sur `backend/**`) : restore, build, test, publish, build + push de l'image `ghcr.io/.../arkcloud-api` sur push vers `main`/`develop`.
+- `.github/workflows/arkcloud-frontend-ci.yml` (déclenché sur `frontend/**`) : restore, build, test (`ArkCloud.Tests.Component`, bUnit), publish, build + push de l'image `ghcr.io/.../arkcloud-frontend` sur push vers `main`/`develop`.
 
-Le Terraform (plan sur PR, apply sur merge, gate manuel pour prod) vit désormais dans le repo séparé `mon-projet-infra`.
+Le Terraform (plan sur PR, apply sur merge, gate manuel pour prod) vit désormais dans le repo séparé `ArkCloudInfra`.
 
 ## Checklist de vérification (à faire en local, non exécutable depuis cette sandbox)
 

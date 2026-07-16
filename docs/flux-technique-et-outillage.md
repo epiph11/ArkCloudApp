@@ -89,12 +89,12 @@ Docker n'est l'affaire d'aucun sprint en particulier : il traverse tout le roadm
 
 ## 6. Le flux complet, étape par étape
 
-1. **Dev push** — code poussé sur `ArkCloud` (app) ou `mon-projet-infra` (infra), CI GitHub Actions déclenchée.
+1. **Dev push** — code poussé sur `ArkCloud` (app) ou `ArkCloudInfra` (infra), CI GitHub Actions déclenchée.
 2. **Build & tests** — restore/build/test unitaires + intégration (`dotnet test`), côté ArkCloud uniquement.
 3. **Build Docker** — image construite en multi-stage (non-root, healthcheck).
 4. **Scan Trivy** — vulnérabilités connues bloquantes avant push.
 5. **Push vers JFrog Artifactory** — image taguée, disponible pour tous les environnements/clouds.
-6. **Terraform (mon-projet-infra)** — `tflint` + `checkov` + `plan` sur PR ; `apply` sur merge, gaté manuellement pour l'environnement prod.
+6. **Terraform (ArkCloudInfra)** — `tflint` + `checkov` + `plan` sur PR ; `apply` sur merge, gaté manuellement pour l'environnement prod.
 7. **Déploiement** — App Service (Sprint 4) tire la nouvelle image ; ECS Fargate (Sprint 5) ou Kubernetes (Sprint 9) plus tard, sans changer l'image elle-même.
 8. **Smoke tests** — vérification post-déploiement automatisée.
 9. **Monitoring** — Application Insights (Azure) / CloudWatch (AWS), alimenté en continu par l'environnement qui tourne.

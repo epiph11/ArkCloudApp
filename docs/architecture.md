@@ -2,22 +2,22 @@
 
 ## Répartition en deux repos
 
-Ce dépôt (`mon-projet`, équipe produit) contient uniquement le code applicatif :
+Ce dépôt (`ArkCloud`, équipe produit) contient uniquement le code applicatif :
 
 ```
-mon-projet/
+ArkCloud/
 ├── backend/                 (Domain, Application, Infrastructure, API, tests)
 ├── frontend/                (ArkCloud.Blazor)
 └── .github/workflows/
-    ├── backend-ci.yml       → build + test + push image Docker (ghcr.io/.../arkcloud-api)
-    └── frontend-ci.yml      → build + push image Docker (ghcr.io/.../arkcloud-frontend)
+    ├── arkcloud-backend-ci.yml       → build + test + push image Docker (ghcr.io/.../arkcloud-api)
+    └── arkcloud-frontend-ci.yml      → build + push image Docker (ghcr.io/.../arkcloud-frontend)
 ```
 
-L'infrastructure (Terraform, environnements cloud) vit dans un repo séparé, `mon-projet-infra`,
+L'infrastructure (Terraform, environnements cloud) vit dans un repo séparé, `ArkCloudInfra`,
 à accès restreint (équipe platform) :
 
 ```
-mon-projet-infra/
+ArkCloudInfra/
 ├── modules/
 ├── environments/{dev,staging,prod}/
 └── .github/workflows/
