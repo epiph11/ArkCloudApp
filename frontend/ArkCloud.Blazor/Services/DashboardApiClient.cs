@@ -12,9 +12,9 @@ namespace ArkCloud.Blazor.Services;
 public class DashboardApiClient
 {
     private readonly HttpClient _httpClient;
-    private readonly TokenStorageService _tokenStorage;
+    private readonly ITokenStorageService _tokenStorage;
 
-    public DashboardApiClient(HttpClient httpClient, TokenStorageService tokenStorage)
+    public DashboardApiClient(HttpClient httpClient, ITokenStorageService tokenStorage)
     {
         _httpClient = httpClient;
         _tokenStorage = tokenStorage;

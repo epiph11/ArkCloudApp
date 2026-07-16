@@ -13,6 +13,23 @@ namespace ArkCloud.Tests.Integration;
 
 public class ArkCloudApiFactory : WebApplicationFactory<Program>, IAsyncLifetime
 {
+    // Program.cs validates Jwt:Key (throws InvalidOperationException if missing) BEFORE
+    // builder.Build() runs — i.e. before WebApplicationFactory ever gets a chance to apply
+    // ConfigureWebHost/ConfigureAppConfiguration below, since those are only spliced in at the
+    // Build() interception point. An environment variable, by contrast, is one of
+    // WebApplication.CreateBuilder's default configuration sources and is already present the
+    // moment Program.cs starts reading builder.Configuration — so this is what actually makes
+    // the pre-Build() validation pass. Must run before any test touches Services/CreateClient()
+    // (first access is what triggers host construction), hence a static constructor.
+    // Fixture value for ephemeral, Testcontainers-backed test runs only, not a real secret —
+    // same category of thing as the Testcontainers Postgres password below.
+    static ArkCloudApiFactory()
+    {
+        Environment.SetEnvironmentVariable(
+            "Jwt__Key",
+            "integration-test-fixture-key-not-a-real-secret-0123456789ABCDEF");
+    }
+
     private readonly PostgreSqlContainer _postgres = new PostgreSqlBuilder()
         .WithImage("postgres:16-alpine")
         .WithDatabase("arkcloud_test")
@@ -22,19 +39,6 @@ public class ArkCloudApiFactory : WebApplicationFactory<Program>, IAsyncLifetime
 
     protected override void ConfigureWebHost(Microsoft.AspNetCore.Hosting.IWebHostBuilder builder)
     {
-        // Program.cs refuses to start without Jwt:Key, and appsettings.Development.json no
-        // longer carries one (that was a committed secret — see README's "Secrets &
-        // configuration" section). This is a fixture value for ephemeral, Testcontainers-backed
-        // test runs only, not a real secret, so it's fine to keep it here in source control —
-        // it's the same category of thing as the Testcontainers Postgres password below.
-        builder.ConfigureAppConfiguration((_, config) =>
-        {
-            config.AddInMemoryCollection(new Dictionary<string, string?>
-            {
-                ["Jwt:Key"] = "integration-test-fixture-key-not-a-real-secret-0123456789ABCDEF"
-            });
-        });
-
         builder.ConfigureServices(services =>
         {
             var descriptor = services.SingleOrDefault(

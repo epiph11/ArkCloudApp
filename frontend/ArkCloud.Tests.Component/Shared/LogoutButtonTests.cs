@@ -51,7 +51,7 @@ public class LogoutButtonTests : AuthTestContext
         logoutRequest.Should().NotBeNull("clicking Logout must call POST /api/v1/auth/logout to revoke the refresh token");
         logoutRequest!.RequestUri!.AbsolutePath.Should().Be("/api/v1/auth/logout");
 
-        var tokenStorage = Services.GetRequiredService<TokenStorageService>();
+        var tokenStorage = Services.GetRequiredService<ITokenStorageService>();
         (await tokenStorage.GetAccessTokenAsync()).Should().BeNull("ClearAsync must run even if the server call fails/succeeds");
 
         var navMan = Services.GetRequiredService<BunitNavigationManager>();

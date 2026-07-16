@@ -181,13 +181,16 @@ public class ProductsTests : ProductsTestContext
 
         var cut = Render<ProductCreate>();
 
-        var inputs = cut.FindAll("input");
-        inputs[0].Change("New Widget");   // Name
-        inputs[1].Change("NW-001");       // Sku
-        inputs[2].Change("Gadgets");      // Category
-        inputs[3].Change("9.99");         // UnitPrice
-        inputs[4].Change("EUR");          // Currency
-        inputs[5].Change("5");            // Stock
+        // Each Change() triggers a re-render, which reassigns Blazor's internal event handler
+        // IDs — reusing a single FindAll() snapshot across multiple Change() calls throws
+        // Bunit.Rendering.UnknownEventHandlerIdException on the second+ call. Re-querying the
+        // DOM fresh before each interaction avoids stale element references.
+        cut.FindAll("input")[0].Change("New Widget");   // Name
+        cut.FindAll("input")[1].Change("NW-001");       // Sku
+        cut.FindAll("input")[2].Change("Gadgets");      // Category
+        cut.FindAll("input")[3].Change("9.99");         // UnitPrice
+        cut.FindAll("input")[4].Change("EUR");          // Currency
+        cut.FindAll("input")[5].Change("5");            // Stock
 
         cut.Find("form").Submit();
 

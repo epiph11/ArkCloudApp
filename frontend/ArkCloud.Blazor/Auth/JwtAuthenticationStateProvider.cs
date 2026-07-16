@@ -17,10 +17,10 @@ public class JwtAuthenticationStateProvider : AuthenticationStateProvider
 {
     private static readonly ClaimsPrincipal Anonymous = new(new ClaimsIdentity());
 
-    private readonly TokenStorageService _tokenStorage;
+    private readonly ITokenStorageService _tokenStorage;
     private readonly AuthApiClient _authApiClient;
 
-    public JwtAuthenticationStateProvider(TokenStorageService tokenStorage, AuthApiClient authApiClient)
+    public JwtAuthenticationStateProvider(ITokenStorageService tokenStorage, AuthApiClient authApiClient)
     {
         _tokenStorage = tokenStorage;
         _authApiClient = authApiClient;

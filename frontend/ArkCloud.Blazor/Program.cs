@@ -12,7 +12,7 @@ builder.Services.AddRazorComponents()
 // Server-side, per-circuit token storage backed by the browser's protected session
 // storage (encrypted client-side, never touches localStorage — see Step 14).
 builder.Services.AddScoped<ProtectedSessionStorage>();
-builder.Services.AddScoped<TokenStorageService>();
+builder.Services.AddScoped<ITokenStorageService, TokenStorageService>();
 
 // A single JwtAuthenticationStateProvider instance is exposed both as the concrete
 // type (so Login/Register/Logout components can call its auth methods) and as the

@@ -12,9 +12,9 @@ namespace ArkCloud.Blazor.Services;
 public class OrdersApiClient
 {
     private readonly HttpClient _httpClient;
-    private readonly TokenStorageService _tokenStorage;
+    private readonly ITokenStorageService _tokenStorage;
 
-    public OrdersApiClient(HttpClient httpClient, TokenStorageService tokenStorage)
+    public OrdersApiClient(HttpClient httpClient, ITokenStorageService tokenStorage)
     {
         _httpClient = httpClient;
         _tokenStorage = tokenStorage;

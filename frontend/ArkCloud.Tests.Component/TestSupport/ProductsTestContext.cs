@@ -1,6 +1,5 @@
 using ArkCloud.Blazor.Services;
 using Bunit;
-using Microsoft.AspNetCore.Components.Server.ProtectedBrowserStorage;
 using Microsoft.Extensions.DependencyInjection;
 
 namespace ArkCloud.Tests.Component.TestSupport;
@@ -17,12 +16,10 @@ public abstract class ProductsTestContext : BunitContext
     {
         JSInterop.Mode = JSRuntimeMode.Loose;
 
-        Services.AddDataProtection();
-        Services.AddScoped<ProtectedSessionStorage>();
-        Services.AddScoped<TokenStorageService>();
+        Services.AddScoped<ITokenStorageService, FakeTokenStorageService>();
         Services.AddScoped(sp => new ProductsApiClient(
             new HttpClient(FakeProductsHandler) { BaseAddress = new Uri("https://fake-api.local/") },
-            sp.GetRequiredService<TokenStorageService>()));
+            sp.GetRequiredService<ITokenStorageService>()));
 
         // Roles/authorized state are set per-test via AddAuthorization().SetAuthorized(...)/.SetRoles(...)
         // (see NavMenuTests) — that bUnit helper supplies its own fake AuthenticationStateProvider

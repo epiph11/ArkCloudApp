@@ -7,7 +7,7 @@ namespace ArkCloud.Blazor.Services;
 /// storage — see Step 14). Never uses localStorage or a static/in-memory field, both of
 /// which would leak the token across users/tabs or survive longer than intended.
 /// </summary>
-public class TokenStorageService
+public class TokenStorageService : ITokenStorageService
 {
     private const string AccessTokenKey = "arkcloud.accessToken";
     private const string RefreshTokenKey = "arkcloud.refreshToken";
