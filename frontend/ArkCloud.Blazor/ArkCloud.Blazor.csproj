@@ -16,6 +16,11 @@
          [Authorize] UI state. The signature is never trusted client-side — see the remarks
          on JwtAuthenticationStateProvider. -->
     <PackageReference Include="System.IdentityModel.Tokens.Jwt" Version="8.14.0" />
+    <!-- Reads APPLICATIONINSIGHTS_CONNECTION_STRING (set as an App Service app setting by
+         ArkCloudInfra's app-service module) automatically — no connection string in code.
+         Custom Docker images don't get Azure's codeless auto-instrumentation, so this explicit
+         SDK registration is required for any telemetry to reach Application Insights at all. -->
+    <PackageReference Include="Microsoft.ApplicationInsights.AspNetCore" Version="2.23.0" />
   </ItemGroup>
 
   <ItemGroup>

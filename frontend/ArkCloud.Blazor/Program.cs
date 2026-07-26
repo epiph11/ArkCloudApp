@@ -6,6 +6,12 @@ using Microsoft.AspNetCore.Components.Server.ProtectedBrowserStorage;
 
 var builder = WebApplication.CreateBuilder(args);
 
+// Reads APPLICATIONINSIGHTS_CONNECTION_STRING from configuration/environment automatically —
+// set by ArkCloudInfra's app-service module as an App Service app setting. Required explicitly
+// because this runs as a custom Docker image: Azure's codeless auto-instrumentation only
+// applies to its own built-in runtime stacks, not arbitrary containers.
+builder.Services.AddApplicationInsightsTelemetry();
+
 builder.Services.AddRazorComponents()
     .AddInteractiveServerComponents();
 

@@ -13,6 +13,11 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <!-- Reads APPLICATIONINSIGHTS_CONNECTION_STRING (set as an App Service app setting by
+         ArkCloudInfra's app-service module) automatically — no connection string in code.
+         Custom Docker images don't get Azure's codeless auto-instrumentation, so this explicit
+         SDK registration is required for any telemetry to reach Application Insights at all. -->
+    <PackageReference Include="Microsoft.ApplicationInsights.AspNetCore" Version="2.23.0" />
     <PackageReference Include="Swashbuckle.AspNetCore" Version="10.2.3" />
     <PackageReference Include="Serilog.AspNetCore" Version="10.0.0" />
     <PackageReference Include="Serilog.Sinks.Console" Version="6.1.1" />
