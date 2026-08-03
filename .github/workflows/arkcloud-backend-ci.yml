@@ -19,6 +19,7 @@ on:
 permissions:
   contents: read
   packages: write
+  id-token: write # required for the AWS OIDC login step below (publish-image job only)
 
 env:
   IMAGE_NAME: ghcr.io/${{ github.repository_owner }}/arkcloud-api
@@ -126,6 +127,37 @@ jobs:
         run: |
           docker tag ${{ env.IMAGE_NAME }}:${{ env.ENV_TAG }} ${{ env.IMAGE_NAME }}:prod
           docker push ${{ env.IMAGE_NAME }}:prod
+
+      # --- AWS / ECR (task #38) ---
+      # GHCR above serves Azure (App Service pulls straight from ghcr.io); ECS on AWS can only
+      # pull from ECR (or a registry it's explicitly authenticated against), so the same image
+      # also needs pushing here — this is what actually lets the ECS services in Sprint 5's
+      # aws_ecs_service_api/web modules run something other than an empty task.
+      #
+      # Guarded to "dev" only: only environments/dev's aws_ecr module exists today (Sprint 5).
+      # staging/prod ECR repos land with Sprints 6-10 — drop this `if:` once those exist, the
+      # step itself needs no change (ECR_REPOSITORY already derives from TF_ENVIRONMENT).
+      - name: Configure AWS credentials
+        if: env.TF_ENVIRONMENT == 'dev'
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_APP_CI_ROLE_ARN }}
+          aws-region: eu-west-1
+
+      - name: Log in to ECR
+        if: env.TF_ENVIRONMENT == 'dev'
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Tag and push image to ECR
+        if: env.TF_ENVIRONMENT == 'dev'
+        env:
+          ECR_REGISTRY: ${{ vars.AWS_ACCOUNT_ID }}.dkr.ecr.eu-west-1.amazonaws.com
+          ECR_REPOSITORY: arkcloud-arkcloud-${{ env.TF_ENVIRONMENT }}/api
+        run: |
+          docker tag ${{ env.IMAGE_NAME }}:${{ github.sha }} $ECR_REGISTRY/$ECR_REPOSITORY:${{ github.sha }}
+          docker tag ${{ env.IMAGE_NAME }}:${{ env.ENV_TAG }} $ECR_REGISTRY/$ECR_REPOSITORY:${{ env.ENV_TAG }}
+          docker push $ECR_REGISTRY/$ECR_REPOSITORY:${{ github.sha }}
+          docker push $ECR_REGISTRY/$ECR_REPOSITORY:${{ env.ENV_TAG }}
 
       # Notifies ArkCloudInfra that a new API image is ready — deploy-on-image.yml over there
       # picks this up and runs a scoped `terraform apply -target=...` for just this app.

@@ -10,27 +10,30 @@
 |---|---|---|
 | Structure du code applicatif | `src/ArkCloud.API`, `src/ArkCloud.Blazor`, etc. | **Inchangé : `backend/` + `frontend/`** — la restructuration a déjà eu lieu, tous les chemins CI/`.sln`/Dockerfiles/docker-compose y sont câblés. Repartir sur `src/` serait un renommage sans valeur ajoutée. |
 | Emplacement Terraform | `ArkCloud/deploy/terraform/` (monorepo) | **Repo séparé `ArkCloudInfra`**, avec la même structure de modules/environnements que celle proposée. CI/CD et permissions restent distincts du repo applicatif (blast radius, gouvernance des changements infra vs code). |
-| Registre d'images/packages | Non spécifié (implicitement ACR/ECR) | **JFrog Artifactory**, introduit en fin de Sprint 4 / début Sprint 5, comme registre unique multi-cloud (remplace GHCR et évite de dupliquer ACR + ECR). Swap de configuration CI, pas de refonte de code. |
+| Registre d'images/packages | Non spécifié (implicitement ACR/ECR) | **Révisé en Sprint 5 (task #33)** : JFrog Artifactory n'a finalement pas été introduit en Sprint 4/5 comme prévu ici initialement — décision prise en session de partir sur **Amazon ECR provisoire** à la place (zéro friction, déjà natif ECS, pas d'outil externe à opérationnaliser tout de suite). JFrog reste prévu mais **sans date fixée** : un chantier séparé, pas rattaché à un sprint numéroté. GHCR continue d'être utilisé côté Azure App Service en parallèle — le registre n'est pas unique multi-cloud pour l'instant, contrairement à l'intention d'origine de cette ligne. |
 | Jenkins | Non mentionné | Évalué **en parallèle de GitHub Actions à partir du Sprint 9** (Kubernetes) — pas avant, tant que les cibles restent PaaS/serverless (App Service, ECS Fargate) où GH Actions suffit. Un seul pipeline porté en test, sans rien couper côté GH Actions. |
 | Puppet / Chef | Non mentionné | **Écartés du roadmap.** Aucune VM longue durée à maintenir dans ce plan (App Service = PaaS, ECS Fargate = serverless, EKS/AKS = nodes managés) : pas de terrain d'usage réel pour un outil de config management. |
 | Kubernetes | Step 9, testable localement avant AKS/EKS | Confirmé en **Sprint 9**, après les fondations Azure (Sprint 4) et AWS (Sprint 5). `deploy/kubernetes/` reste un dossier vide (placeholder) jusque-là. |
+| Outillage qualité de code / architecture / dette technique / gouvernance d'entreprise | Non spécifié | **Distribué dans les Sprints 6 à 10 existants** (pas de sprint dédié) — chaque outil rejoint le sprint où il a du contenu réel à analyser plutôt que d'attendre un sprint isolé en fin de roadmap. Stack majoritairement gratuite/open-source ; **NDepend** est le seul outil payant retenu (essai 14 jours puis licence ~500-900$/an), pour l'analyse de dépendances/cycles/SOLID spécifique .NET qu'aucun outil gratuit n'égale vraiment. **LeanIX et Sparx Enterprise Architect écartés** : outils de cartographie de portefeuille multi-applications (dizaines d'apps, plusieurs business units) — hors d'échelle pour un produit unique, même à maturité Sprint 10. Détail complet : Step 18. |
+| Adoption TOGAF 10.0 | Non spécifié | **Nouveau Sprint 11, dédié, en fin de roadmap** (pas d'interruption du Sprint 5 en cours ni des Sprints 6-10 déjà planifiés) — rigueur complète demandée : le cycle ADM est suivi dans son intégralité (Preliminary + Phases A à H + Requirements Management), avec tous les livrables formels de chaque phase, pas une version allégée. Choix explicite de démarrer ce sprint une fois la plateforme réellement construite (Azure + AWS + Angular + microservices + Kubernetes + SRE), pour que les Architectures Business/Data/Application/Technology documentent un système réel plutôt qu'anticipent un système qui n'existe pas encore. Les documents déjà produits (README, ce roadmap, `docs/architecture.md`, les états des lieux Sprint 1-4 et Sprint 4/5) seront **réécrits en terminologie/structure TOGAF** dans le cadre de ce sprint plutôt que dupliqués à côté. Détail complet : Step 19. |
 
 ---
 
 ## 🗺️ Correspondance avec les sprints
 
-| Sprint | Contenu | Statut |
-|---|---|---|
-| 1 | Cadrage + backend de base | ✅ Fait |
-| 2 | Qualité backend (validation, middleware, logging, tests, docker compose) | ✅ Fait |
-| 3 | Auth JWT + Blazor | ✅ Fait |
-| 4 | **CI/CD + Azure** (ce document, Steps 1–9 partie Azure) | 🔄 En cours |
-| 5 | AWS foundation (Steps 10–12) | ⏳ À venir |
-| 6 | Sécurité cloud avancée (Step 16) | ⏳ À venir |
-| 7 | Angular enterprise | ⏳ À venir |
-| 8 | Microservices | ⏳ À venir |
-| 9 | Kubernetes (Step 9 pour de vrai, sur cluster managé) | ⏳ À venir |
-| 10 | SRE / plateforme | ⏳ À venir |
+| Sprint | Contenu | Outillage qualité/architecture/gouvernance ajouté *(Step 18)* | Statut |
+|---|---|---|---|
+| 1 | Cadrage + backend de base | — | ✅ Fait |
+| 2 | Qualité backend (validation, middleware, logging, tests, docker compose) | — | ✅ Fait |
+| 3 | Auth JWT + Blazor | — | ✅ Fait |
+| 4 | **CI/CD + Azure** (ce document, Steps 1–9 partie Azure) | — | ✅ Clôturé (28/07/2026) |
+| 5 | AWS foundation (Steps 10–12) | — | 🔄 En cours (Step 10 réseau) |
+| 6 | Sécurité cloud avancée (Step 16) | SonarQube/SonarCloud, NDepend *(payant)*, ArchUnitNET, Snyk, Renovate | ⏳ À venir |
+| 7 | Angular enterprise | Compodoc, extension SonarCloud au TypeScript/Angular | ⏳ À venir |
+| 8 | Microservices | Structurizr Lite + Mermaid (C4), Swagger/OpenAPI + Redocly par service | ⏳ À venir |
+| 9 | Kubernetes (Step 9 pour de vrai, sur cluster managé) | Open Policy Agent / Gatekeeper | ⏳ À venir |
+| 10 | SRE / plateforme | Grafana + Prometheus, k6, Backstage | ⏳ À venir |
+| 11 | **Adoption TOGAF 10.0 & réalignement architecture d'entreprise** (Step 19) | Cycle ADM complet (Preliminary + A à H), tous livrables formels | ⏳ À venir (fin de roadmap) |
 
 ---
 
@@ -374,7 +377,7 @@ Health Checks
 
 Activer : CloudWatch Logs, Container Insights.
 
-> Réutilise le registre JFrog introduit en Sprint 4 plutôt que de dupliquer avec ECR — à valider selon coûts/latence réels une fois en place.
+> Révisé (task #33) : utilise **Amazon ECR** (2 repos, `modules/aws/ecr`), pas JFrog — JFrog reste une migration future non datée. GHCR continue d'alimenter Azure App Service en parallèle ; les deux clouds ont donc chacun leur propre registre pour l'instant, pas un registre unique partagé. Le vrai bloquant actuel n'est pas le registre mais la CI d'ArkCloud, qui ne pousse encore que vers GHCR — tant qu'elle n'est pas mise à jour pour pousser aussi vers ces 2 repos ECR (task #38), les tâches ECS ne peuvent pas démarrer (`CannotPullContainerError`).
 
 ---
 
@@ -486,7 +489,8 @@ Développeur → Git Push → Restore → Build → Tests unitaires
 - [ ] Automatisation Terraform
 - [ ] Tests automatisés
 - [ ] Scan de sécurité (Trivy/Checkov)
-- [ ] Registre JFrog Artifactory
+- [x] Registre AWS (ECR, provisoire — task #33)
+- [ ] Registre JFrog Artifactory *(migration future, pas de date fixée)*
 - [ ] Évaluation Jenkins *(Sprint 9)*
 
 **Sécurité**
@@ -495,6 +499,184 @@ Développeur → Git Push → Restore → Build → Tests unitaires
 - [ ] TLS partout
 - [ ] Rotation des secrets
 - [ ] Audit logging activé
+
+**Qualité, architecture & gouvernance** *(Step 18, Sprints 6-10)*
+- [ ] Quality gate SonarQube/SonarCloud bloquant en CI (bugs, vulnerabilities, code smells, couverture)
+- [ ] NDepend — 0 violation de règle de dépendance critique (ex. Domain ne référence jamais Infrastructure)
+- [ ] ArchUnitNET — tests d'architecture dans la suite de tests, exécutés en CI
+- [ ] Snyk — 0 vulnérabilité critique/haute non corrigée (dépendances, images Docker, IaC)
+- [ ] Renovate configuré (PRs automatiques de mise à jour de dépendances)
+- [ ] Documentation d'architecture C4 à jour (Structurizr/Mermaid)
+- [ ] OpenAPI/Swagger publié et versionné par service (Redocly pour la doc consommable)
+- [ ] Politiques Open Policy Agent actives sur le cluster Kubernetes
+- [ ] Backstage — catalogue des services/APIs/ownership à jour
+- [ ] Grafana + Prometheus — dashboards de plateforme, alerting configuré
+- [ ] k6 — scénarios de tests de charge sur les endpoints critiques
+
+---
+
+## Step 18 — Outillage qualité de code, architecture & gouvernance d'entreprise
+
+> Objectif : couvrir les dimensions qu'un pipeline CI/CD (fmt/tflint/Checkov/Trivy, déjà en place) ne couvre pas — qualité de code dans la durée, dette technique, architecture logicielle, dépendances, documentation vivante, performance, gouvernance. Distribué dans les Sprints 6 à 10 (voir tableau plus haut) plutôt qu'un sprint dédié : chaque outil rejoint le sprint où il a du contenu réel à analyser, pas avant.
+>
+> **Contrainte budget retenue** : stack très majoritairement gratuite/open-source. Un seul outil payant, **NDepend**, retenu là où aucun équivalent gratuit ne couvre la même profondeur pour du .NET. LeanIX, Sparx Enterprise Architect, GitHub Advanced Security (au-delà des repos publics) et Checkmarx sont écartés — soit trop chers pour la valeur ajoutée à cette échelle, soit redondants avec un outil déjà retenu.
+
+### 18.1 Qualité de code — Sprint 6
+
+- **SonarQube (Community Edition, self-hosted) ou SonarCloud (gratuit en repo public)** : bugs, vulnerabilities, code smells, duplications, couverture de tests, complexité cyclomatique, security hotspots. Couvre C#/.NET, TypeScript/Angular et Blazor. Quality gate branché sur `terraform-ci.yml`/`arkcloud-backend-ci.yml`/`arkcloud-frontend-ci.yml` : PR bloquée si le gate échoue.
+- Alternative écartée : **JetBrains Qodana** — solide sur .NET mais SonarQube couvre déjà C# + TypeScript dans un seul outil, pas besoin de deux plateformes de qualité de code.
+
+### 18.2 Architecture logicielle — Sprint 6
+
+- **NDepend** *(payant, seul outil commercial retenu)* : dépendances entre `ArkCloud.Domain`/`Application`/`Infrastructure`/`API`, détection de cycles, respect du sens de dépendance de la Clean Architecture, complexité, règles personnalisées. C'est l'outil qui aurait détecté une violation du type "Infrastructure référence Domain dans le mauvais sens" avant que ça arrive en revue de code.
+- **ArchUnitNET** *(gratuit)* : les mêmes règles de couche, mais **as code**, exécutées comme tests dans `backend/tests/` — le build échoue si une règle est cassée, pas besoin d'ouvrir un rapport séparé. Complémentaire à NDepend, pas un doublon : NDepend pour l'exploration/diagnostic, ArchUnitNET pour l'enforcement continu en CI.
+
+### 18.3 Dépendances & sécurité — Sprint 6
+
+- **Snyk** *(free tier)* : dépendances NuGet/npm, images Docker, IaC (Terraform) — vient en complément de Trivy (déjà en place côté scan d'image) et Checkov (déjà en place côté Terraform), pas en remplacement.
+- **Renovate** *(gratuit)* : mises à jour de dépendances automatisées, plus configurable que Dependabot (groupement de PRs, schedules, auto-merge sur les patchs mineurs).
+
+### 18.4 Documentation d'architecture — Sprint 7-8
+
+- **Mermaid** *(gratuit, déjà utilisable directement dans le Markdown GitHub)* : diagrammes légers au fil de l'eau dans `docs/`.
+- **Structurizr Lite** *(gratuit, self-hosted)* : modèle C4 complet (Enterprise → Système → Conteneurs → Composants) à partir du Sprint 8 (Microservices), quand il y a plusieurs services à cartographier — avant ça, un seul système avec 4 couches ne justifie pas le modèle C4.
+- **Compodoc** *(gratuit)* : documentation générée du code Angular, Sprint 7.
+- **Swagger/OpenAPI** *(déjà en place côté ArkCloud.API)* **+ Redocly** *(gratuit)* : documentation API consommable, un jeu de specs par service à partir du Sprint 8.
+
+### 18.5 Gouvernance — Sprint 9
+
+- **Open Policy Agent (Gatekeeper)** *(gratuit)* : policies as code sur le cluster Kubernetes (Sprint 9) — admission control, refuse un manifest qui ne respecte pas les règles (ex. pas de conteneur root, limites de ressources obligatoires). Choisi à ce sprint précisément parce que c'est là qu'apparaît la ressource qu'OPA gouverne (avant Kubernetes, rien à admettre).
+- **OpenRewrite** *(gratuit, hors sprint dédié)* : gardé en réserve pour les montées de version majeures (.NET, Angular) plutôt que rattaché à un sprint — outil ponctuel, pas un contrôle continu.
+
+### 18.6 Observabilité, performance & portail développeur — Sprint 10
+
+- **Grafana + Prometheus** *(gratuits, self-hosted ou managés)* : consolidation des métriques Azure/AWS/Kubernetes dans un seul plan d'observabilité, complète Application Insights/CloudWatch (déjà en place par cloud) sans les remplacer.
+- **k6** *(gratuit)* : tests de charge sur les endpoints critiques (`orders`, `auth`) avant mise en prod.
+- **Backstage** *(gratuit, open-source, self-hosted)* : portail développeur — catalogue des services, APIs, pipelines, ownership. Placé en Sprint 10 plutôt que plus tôt : avant Microservices (Sprint 8) et Kubernetes (Sprint 9), il n'y a qu'un système à cataloguer, pas assez de contenu pour justifier l'outil.
+
+### Écartés du roadmap
+
+| Outil | Raison |
+|---|---|
+| LeanIX | Cartographie de portefeuille multi-applications (business capabilities, dizaines d'apps) — hors d'échelle pour un produit unique. |
+| Sparx Enterprise Architect | Même famille que LeanIX (TOGAF/ArchiMate à l'échelle d'un portefeuille) — pas de terrain d'usage ici. |
+| GitHub Advanced Security | Gratuit uniquement sur repos publics ; redondant avec Snyk + Trivy + Checkov déjà en place pour un repo privé. |
+| Checkmarx | Redondant avec Snyk (même catégorie SAST/dépendances), pas de valeur ajoutée à payer les deux. |
+
+---
+
+## Step 19 — Sprint 11 : Adoption TOGAF 10.0 & réalignement architecture d'entreprise
+
+> Décision : rigueur complète, pas une version allégée — le cycle ADM (Architecture Development Method) est suivi dans son intégralité, avec tous les livrables formels de chaque phase, sur le même produit ArkCloud. Placé en fin de roadmap (après le Sprint 10) plutôt qu'immédiatement après le Sprint 5 : documenter Business/Data/Application/Technology Architecture n'a de sens que sur une plateforme réellement construite (Azure + AWS + Angular enterprise + microservices + Kubernetes + SRE), pas sur un système encore à moitié bâti. N'interrompt ni la fin du Sprint 5 (Steps 11/15/CI-CD cross-cloud restants) ni les Sprints 6-10 déjà planifiés.
+>
+> Les documents déjà produits dans ce projet (`ArkCloud/README.md`, ce roadmap, `docs/architecture.md`, les états des lieux Sprint 1-4 et Sprint 4/5, `ArkCloudInfra/README.md`) sont **réécrits en terminologie et structure TOGAF** au fil de ce sprint plutôt que dupliqués à côté — le contenu factuel qu'ils décrivent ne change pas, seule son organisation dans le Content Metamodel TOGAF change.
+
+### Cadre : le cycle ADM et son centre
+
+Le TOGAF 10.0 restructure le contenu autour d'un **Fundamental Content** (ADM, techniques, Content Framework, gouvernance) et de **Series Guides** optionnels. Le cœur reste le cycle ADM ci-dessous, avec la **Gestion des Exigences (Requirements Management)** au centre — alimentée par, et alimentant, chacune des phases :
+
+```
+                     Requirements Management
+                    (centre du cycle, continu)
+                              ↑↓
+Preliminary → A: Vision → B: Business → C: Data/Application → D: Technology
+                                                                      ↓
+        H: Change Mgmt ← G: Implementation Gov. ← F: Migration Plan ← E: Opportunities & Solutions
+```
+
+### Préliminaire — Établir la capacité d'architecture
+
+**Livrables :**
+- **Organizational Model for Enterprise Architecture** — pour ArkCloud : rôles (qui est Architecte d'Entreprise, qui gouverne les décisions techniques), même à effectif réduit.
+- **Tailored Architecture Framework** — ce document explique comment TOGAF est adapté à ArkCloud (produit unique, pas de portfolio multi-applications) plutôt que retenu tel quel.
+- **Architecture Principles** (catalogue) — dérivés des décisions déjà prises et documentées dans ce roadmap et le Journal des décisions (ex. "Terraform multi-cloud dans un seul state", "pas de secret via Terraform", "audit logging vérifié par requête réelle, pas par un statut vert") reformulés comme des principes formels (énoncé, justification, implications).
+- **Architecture Repository** (initialisation) — devient le point d'entrée : `docs/architecture.md`, `docs/infra-roadmap.md`, les modules Terraform eux-mêmes comme Architecture/Solution Building Blocks.
+
+### Phase A — Architecture Vision
+
+**Livrables :**
+- **Statement of Architecture Work** (approuvé) — périmètre, objectifs, contraintes de ce cycle ADM.
+- **Stakeholder Map** — même pour un produit à petite équipe : utilisateurs finaux (clients de l'API/Blazor), exploitant (toi), futurs contributeurs.
+- **Business Scenarios** — les cas d'usage métier réels déjà couverts (customers/products/orders) formalisés en scénario TOGAF (acteur, déclencheur, résultat souhaité).
+- **Capability Assessment** — état actuel (Sprints 1-10 réalisés) vs capacité cible.
+- **Architecture Vision** (document, avec Value Chain diagram et Solution Concept diagram) — synthèse narrative, dans l'esprit des documents storytelling déjà produits pour les Sprints 4/5, mais structurée selon le gabarit TOGAF.
+- **Draft Architecture Definition Document** — première version du document qui sera complété phase après phase.
+- **Communications Plan** — comment les décisions d'architecture sont communiquées (ce roadmap en est déjà un exemple vivant).
+
+### Phase B — Business Architecture
+
+**Livrables :**
+- **Business Footprint diagram** — objectifs métier → fonctions → services rendus par ArkCloud.
+- **Business Service/Function Catalog** — gestion catalogue produits, gestion commandes, authentification, etc.
+- **Business Interaction diagram** — comment les rôles (Admin/Manager/User, cf. `seed_users.sql`) interagissent avec ces fonctions.
+- **Business Process Catalog** — cycle de vie d'une commande (Draft → Submitted → Paid/Cancelled) formalisé en tant que processus métier, pas seulement en tant que statuts d'entité.
+- **Business Architecture Report** — synthèse de phase.
+
+### Phase C — Information Systems Architecture (Data + Application)
+
+**Data Architecture — livrables :**
+- **Data Entity/Data Component Catalog** — Customer, Product, Order, OrderItem, User, Role (déjà modélisés côté EF Core), catalogués formellement.
+- **Data Dissemination diagram** — où vivent ces données (PostgreSQL Azure ET AWS RDS — un vrai sujet TOGAF vu le multi-cloud).
+- **Data Security diagram** — chiffrement au repos (Azure Storage encryption / KMS RDS), en transit (SSL forcé des deux côtés), qui peut lire quoi (Managed Identity / IAM DB auth).
+- **Data Migration diagram** — pertinent si des données doivent un jour circuler entre Azure PostgreSQL et AWS RDS.
+
+**Application Architecture — livrables :**
+- **Application Portfolio Catalog** — ArkCloud.API, ArkCloud.Blazor, (futur) frontend Angular, (futur) microservices du Sprint 8.
+- **Application/Function Matrix** — quelle application sert quelle fonction métier de la Phase B.
+- **Application Communication diagram** — Blazor → API, futurs microservices entre eux, ALB/App Service en frontal.
+- **Application Architecture Report**.
+
+### Phase D — Technology Architecture
+
+**Livrables :**
+- **Technology Standards Catalog** — .NET 10, PostgreSQL 16, Terraform, Docker, Kubernetes (Sprint 9), GitHub Actions — versions et justifications déjà en grande partie présentes dans ce roadmap, à consolider ici.
+- **Technology Portfolio Catalog** — App Service/ECS Fargate, Key Vault/Secrets Manager, Log Analytics/CloudWatch — inventaire formel des deux clouds côte à côte.
+- **Network/Communications diagram** — VNet Azure + VPC AWS, déjà en grande partie couvert par les diagrammes Graphviz produits pour les états des lieux Sprint 4/5, à reformater au gabarit TOGAF.
+- **Platform Decomposition diagram**, **Environments & Locations diagram** — dev/staging/prod × Azure/AWS × régions (westeurope/eu-west-1).
+
+### Phase E — Opportunities & Solutions
+
+**Livrables :**
+- **Consolidated Gaps, Solutions & Dependencies Matrix** — tout ce qui est aujourd'hui documenté comme `skip_check` Checkov, TODO Sprint 6+, ou item Step 17 non coché, consolidé formellement.
+- **Draft Architecture Roadmap** — quelles capacités cibles (Angular enterprise, microservices, Kubernetes, SRE) dans quel ordre, avec dépendances explicites.
+- Identification des **Transition Architectures** — états intermédiaires (ex. "AWS avec RDS mais sans ECS" = état actuel exact au moment d'écrire ce document).
+
+### Phase F — Migration Planning
+
+**Livrables :**
+- **Implementation and Migration Plan** (détaillé — coût, bénéfice, risque par incrément) — les Sprints 6 à 10 déjà planifiés devenus des incréments de migration formels.
+- **Architecture Roadmap** (finalisée).
+- **Architecture Definition Document** (mis à jour avec le contenu des Phases B/C/D).
+
+### Phase G — Implementation Governance
+
+**Livrables :**
+- **Architecture Contracts** — accords formels entre l'équipe de développement (même réduite à une personne) et la gouvernance d'architecture sur la conformité de chaque livraison.
+- **Compliance Assessments** — vérification que chaque Sprint livré (1 à 10) respecte les Architecture Principles du Préliminaire. Rétroactif pour les Sprints déjà clos.
+- **Change Requests**, **Business Value Assessment**.
+
+### Phase H — Architecture Change Management
+
+**Livrables :**
+- **Architecture Change Requests** — process formel pour toute évolution future (nouveau cloud, nouveau framework frontend, etc.).
+- Critères de décision : quand une évolution reste une simple mise à jour (pas de nouveau cycle ADM) vs quand elle déclenche un retour en Phase A.
+- **Architecture Repository** mis à jour en continu à partir d'ici.
+
+### Requirements Management (continu)
+
+**Livrables :**
+- **Architecture Requirements Specification** — consolidation de toutes les exigences non-fonctionnelles déjà présentes de façon informelle dans ce projet (audit logging, rotation des secrets, isolation réseau Blazor/PostgreSQL, etc.), formalisées et tracées phase par phase.
+- **Requirements Impact Assessment** — à chaque changement futur, évaluation de l'impact sur les exigences déjà tracées.
+
+### Réalignement des documents existants
+
+Dans le cadre de ce sprint, les documents suivants sont réécrits en structure/terminologie TOGAF (contenu factuel conservé, organisation TOGAF-isée) :
+
+- `ArkCloud/README.md` → sections réorganisées pour faire apparaître Application Architecture (Phase C) et Technology Architecture (Phase D).
+- `ArkCloud/docs/infra-roadmap.md` (ce document) → devient largement l'**Architecture Roadmap** (Phase E/F) une fois le Sprint 11 clos.
+- `ArkCloud/docs/architecture.md` → refondu en **Architecture Definition Document** consolidé (Vision + Business + Data + Application + Technology).
+- États des lieux Sprint 1-4 et récits Sprint 4/5 (`.docx`) → deviennent les **Compliance Assessments** rétroactifs (Phase G) : preuve que chaque sprint livré respecte les principes établis au Préliminaire.
+- `ArkCloudInfra/README.md` → sections Steps 1-17 réorganisées sous Technology Architecture (Phase D) et Implementation Governance (Phase G).
 
 ---
 
