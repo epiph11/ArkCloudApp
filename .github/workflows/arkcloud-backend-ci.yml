@@ -15,6 +15,9 @@ on:
     paths:
       - "backend/**"
       - ".github/workflows/arkcloud-backend-ci.yml"
+  # Manual trigger — not subject to the paths filters above, useful for retesting
+  # publish-image (e.g. AWS OIDC/ECR changes) without needing an unrelated file edit.
+  workflow_dispatch:
 
 permissions:
   contents: read
@@ -73,8 +76,9 @@ jobs:
   publish-image:
     needs: build-test
     if: >-
-      github.event_name == 'push' &&
-      (startsWith(github.ref, 'refs/tags/v') || github.ref_name == 'staging' || github.ref_name == 'develop')
+      (github.event_name == 'push' &&
+       (startsWith(github.ref, 'refs/tags/v') || github.ref_name == 'staging' || github.ref_name == 'develop')) ||
+      github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
     # Requires "development", "staging" and "production" Environments configured in
     # Settings > Environments. Add required reviewers on "production" there to get a
