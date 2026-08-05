@@ -221,6 +221,16 @@ builder.WebHost.ConfigureKestrel(options =>
 
 var app = builder.Build();
 
+// AWS ALB path-based routing (no custom domain yet, see modules/aws/alb) forwards the full
+// incoming path unchanged — a public request for "/api/customers" arrives here as literally
+// "/api/customers", but every route in this app is registered without that prefix (e.g.
+// "/customers"). UsePathBase strips it into PathBase before routing runs. It's a no-op for
+// any request that doesn't start with "/api" — Azure App Service never sends that prefix
+// (each app has its own hostname there, no path-based routing), and the ALB's own internal
+// health check hits the container directly at "/health" (bypassing listener rules entirely),
+// so neither is affected by this.
+app.UsePathBase("/api");
+
 // Load-balancer health check (ALB target group / Azure App Service health check both probe
 // this path — see modules/aws/alb and modules/azure/app-service's health_check_path, default
 // "/health" in both). Mapped before auth/rate-limiting middleware and with no [Authorize] so
