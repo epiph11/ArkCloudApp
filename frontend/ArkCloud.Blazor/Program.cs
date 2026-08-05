@@ -66,6 +66,9 @@ builder.Services.AddHttpClient<DashboardApiClient>(client =>
 
 var app = builder.Build();
 
+// Load-balancer health check — same convention as ArkCloud.API, see comment there.
+app.MapGet("/health", () => Results.Ok());
+
 if (!app.Environment.IsDevelopment())
 {
     app.UseExceptionHandler("/Error", createScopeForErrors: true);

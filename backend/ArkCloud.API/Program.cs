@@ -221,6 +221,12 @@ builder.WebHost.ConfigureKestrel(options =>
 
 var app = builder.Build();
 
+// Load-balancer health check (ALB target group / Azure App Service health check both probe
+// this path — see modules/aws/alb and modules/azure/app-service's health_check_path, default
+// "/health" in both). Mapped before auth/rate-limiting middleware and with no [Authorize] so
+// it's always reachable anonymously, matching what a health probe needs.
+app.MapGet("/health", () => Results.Ok());
+
 app.UseMiddleware<CorrelationIdMiddleware>();
 app.UseMiddleware<ExceptionHandlingMiddleware>();
 app.UseMiddleware<SecurityHeadersMiddleware>();
