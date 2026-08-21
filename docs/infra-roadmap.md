@@ -16,6 +16,8 @@
 | Kubernetes | Step 9, testable localement avant AKS/EKS | Confirmé en **Sprint 9**, après les fondations Azure (Sprint 4) et AWS (Sprint 5). `deploy/kubernetes/` reste un dossier vide (placeholder) jusque-là. |
 | Outillage qualité de code / architecture / dette technique / gouvernance d'entreprise | Non spécifié | **Distribué dans les Sprints 6 à 10 existants** (pas de sprint dédié) — chaque outil rejoint le sprint où il a du contenu réel à analyser plutôt que d'attendre un sprint isolé en fin de roadmap. Stack majoritairement gratuite/open-source ; **NDepend** est le seul outil payant retenu (essai 14 jours puis licence ~500-900$/an), pour l'analyse de dépendances/cycles/SOLID spécifique .NET qu'aucun outil gratuit n'égale vraiment. **LeanIX et Sparx Enterprise Architect écartés** : outils de cartographie de portefeuille multi-applications (dizaines d'apps, plusieurs business units) — hors d'échelle pour un produit unique, même à maturité Sprint 10. Détail complet : Step 18. |
 | Adoption TOGAF 10.0 | Non spécifié | **Nouveau Sprint 11, dédié, en fin de roadmap** (pas d'interruption du Sprint 5 en cours ni des Sprints 6-10 déjà planifiés) — rigueur complète demandée : le cycle ADM est suivi dans son intégralité (Preliminary + Phases A à H + Requirements Management), avec tous les livrables formels de chaque phase, pas une version allégée. Choix explicite de démarrer ce sprint une fois la plateforme réellement construite (Azure + AWS + Angular + microservices + Kubernetes + SRE), pour que les Architectures Business/Data/Application/Technology documentent un système réel plutôt qu'anticipent un système qui n'existe pas encore. Les documents déjà produits (README, ce roadmap, `docs/architecture.md`, les états des lieux Sprint 1-4 et Sprint 4/5) seront **réécrits en terminologie/structure TOGAF** dans le cadre de ce sprint plutôt que dupliqués à côté. Détail complet : Step 19. |
+| Garde-fou coût Azure (`modules/azure/cost-guard`) | Non spécifié | **Décision prise en session (août 2026)**, suite à la découverte de deux plans App Service Basic B1 non partagés tournant en continu : un budget Azure Cost Management de **7 €/mois**, scopé au resource group `rg-arkcloud-dev` (pas à l'abonnement — le storage account Terraform state ne doit pas compter). À 100 % de dépassement, un Automation Runbook (identité managée, least-privilege scopé au serveur Postgres uniquement) **arrête PostgreSQL Flexible Server automatiquement** — ce n'est **pas** une bascule App Service vers un tier moins cher : vérifié en direct que Free (F1) et Shared (D1) ne supportent pas l'intégration VNet régionale dont l'API a besoin pour atteindre Postgres en privé (`az appservice plan update --sku F1` échoue tant que l'app y est rattachée), donc Basic B1 est déjà le tier le moins cher qui reste fonctionnel côté App Service — pas de palier de repli gracieux à automatiser là. Limite connue : les données de coût Azure ne sont pas temps réel (latence de plusieurs heures documentée par Microsoft), donc le déclenchement peut arriver après que le seuil soit déjà dépassé, avec un peu de dépense supplémentaire entre-temps. Côté AWS, rien de construit pour l'instant — Cost Explorer n'est pas encore activé sur le compte, donc pas de vrais chiffres pour dimensionner un seuil équivalent. |
+| Architecture cible Azure/AWS (post-Sprint 5) | Non spécifié — le roadmap ne définissait aucun état final pour la coexistence des deux clouds | **Décision prise en session (août 2026)** : Azure et AWS restent **parallèles et actifs simultanément à court terme** (état actuel — deux copies complètes et indépendantes du stack, sans lien fonctionnel : bases séparées, secrets/clés JWT séparés, aucun routage ni bascule entre elles). **Cible à terme : primaire + DR (bascule)**, pas un actif-actif symétrique — choix cohérent avec la pratique entreprise réelle (coût/complexité de l'actif-actif rarement justifié). Le patron retenu pour la migration future est le **warm standby** : un cloud primaire sert tout le trafic, le secondaire tourne à capacité réduite avec réplication de données en continu, prêt à être promu. Trois chantiers identifiés comme bloquants pour cette migration, non commencés : (1) réplication logique PostgreSQL cross-cloud primaire→secondaire (le vrai point dur — la donnée, pas le compute), (2) couche DNS/health-check agnostique au-dessus des deux clouds (ni Traffic Manager ni Route 53 seuls ne supervisent nativement l'autre cloud), (3) unification de la clé de signature JWT entre Key Vault et Secrets Manager (sinon un token émis par un cloud est invalide sur l'autre après bascule). Pas de sprint numéroté attribué pour l'instant — candidat naturel pour le travail Data Architecture du Sprint 11 (TOGAF), qui prévoit déjà un Data Migration diagram Azure↔AWS. |
 
 ---
 
@@ -27,7 +29,7 @@
 | 2 | Qualité backend (validation, middleware, logging, tests, docker compose) | — | ✅ Fait |
 | 3 | Auth JWT + Blazor | — | ✅ Fait |
 | 4 | **CI/CD + Azure** (ce document, Steps 1–9 partie Azure) | — | ✅ Clôturé (28/07/2026) |
-| 5 | AWS foundation (Steps 10–12) | — | 🔄 En cours (Step 10 réseau) |
+| 5 | AWS foundation (Steps 10–12) | — | ✅ Clôturé |
 | 6 | Sécurité cloud avancée (Step 16) | SonarQube/SonarCloud, NDepend *(payant)*, ArchUnitNET, Snyk, Renovate | ⏳ À venir |
 | 7 | Angular enterprise | Compodoc, extension SonarCloud au TypeScript/Angular | ⏳ À venir |
 | 8 | Microservices | Structurizr Lite + Mermaid (C4), Swagger/OpenAPI + Redocly par service | ⏳ À venir |
@@ -451,6 +453,49 @@ Développeur → Git Push → Restore → Build → Tests unitaires
 
 > Puppet/Chef volontairement absents de cette section — pas de VM longue durée dans ce roadmap à faire converger/dériver.
 
+> **NSG flow logs — fait (Sprint 6), mais pas des NSG flow logs au final** : `modules/azure/flow-logs` — Network Watcher (référencé via data source, celui auto-créé par Azure existe déjà depuis la création du VNet), storage account dédié, rétention 30 jours. Bug réel découvert à l'apply : Azure a retiré la création de **nouveaux** NSG flow logs le 30/06/2025 (retraite complète le 30/09/2027) — confirmé contre la doc officielle du provider AzureRM et le guide de migration Microsoft. Remplacé par les **Virtual Network Flow Logs** : même ressource Terraform (`azurerm_network_watcher_flow_log`), `target_resource_id` pointé sur le VNet entier plutôt que `network_security_group_id` sur chaque NSG — un seul flow log couvre les 4 sous-réseaux (api/web/database/private-endpoint) au lieu d'un par NSG. Traffic Analytics désactivé par défaut (`azure_enable_traffic_analytics = false`) — facturé au Go traité en plus des flow logs eux-mêmes, activable plus tard sans changement de code si un vrai besoin de requêtage apparaît.
+
+---
+
+## Step 16 bis — Exploiter le plein potentiel du multi-cloud *(post-Sprint 5, distribué Sprints 6/9/10)*
+
+Suite à la décision d'architecture cible Azure/AWS (Journal des décisions) : aujourd'hui, les deux clouds sont deux copies parallèles sans lien fonctionnel. Ce qui suit sont les chantiers qui transformeraient ça en un vrai système multi-cloud plutôt qu'une coïncidence de deux déploiements similaires — chacun rattaché au sprint où il a du sens, pas un sprint dédié isolé.
+
+**Sprint 6 (Sécurité cloud avancée) :**
+- **Réseau privé cross-cloud** — VPN site-to-site ou interconnect dédié entre le VPC AWS et le VNet Azure, pour que la future réplication PostgreSQL primaire→secondaire (bloquant identifié pour le DR) ne transite jamais par l'internet public.
+- **Identité fédérée unique** — Azure AD/Entra ID comme IdP fédéré vers AWS IAM (SAML/OIDC), pour arrêter de gérer deux systèmes d'identité/rôles indépendants.
+- **Unification de la clé de signature JWT** — un seul secret source de vérité, synchronisé entre Key Vault et Secrets Manager, pour qu'un token émis par un cloud reste valide après une bascule vers l'autre.
+
+**Sprint 9 (Kubernetes) :**
+- **Portabilité réelle** — un seul jeu de manifests Kubernetes (Step 9) déployé indifféremment sur AKS ou EKS sans divergence, comme vrai test de portabilité multi-cloud plutôt que deux Terraform/Dockerfiles qui se ressemblent par coïncidence.
+- **Policy-as-code commune** — les politiques Open Policy Agent/Gatekeeper (déjà prévues Step 18.5) appliquées identiquement aux deux clusters, pour que "sécurisé sur Azure" et "sécurisé sur AWS" soient la même règle et non deux checklists qui divergent avec le temps.
+
+**Sprint 10 (SRE / plateforme) :**
+- **Observabilité unifiée** — Grafana (déjà prévu Step 18.6) comme pane unique agrégeant CloudWatch et Application Insights/Log Analytics, pour ne plus avoir deux dashboards séparés à surveiller en cas d'incident.
+- **FinOps cross-cloud** — visibilité de coût agrégée (AWS Cost Explorer + Azure Cost Management) dans un seul rapport, plutôt que deux factures suivies séparément.
+
+**Explicitement écarté, hors d'échelle pour ce projet :** arbitrage de coût dynamique entre clouds (déplacer la charge vers le moins cher en temps réel) et présence géographique multi-provider (latence utilisateur par région) — leviers réels seulement à un volume et une base utilisateur qu'un projet solo n'atteint pas. À éviter aussi : sur-abstraire le code pour rester au plus petit dénominateur commun des deux clouds — la vraie portabilité viendra de Kubernetes (ci-dessus), pas de l'évitement des services managés natifs (RDS/Secrets Manager/ALB côté AWS, App Service/Key Vault côté Azure), qui feraient perdre l'intérêt de ces services sans gain mesurable.
+
+> Rattachement Sprint 11 (TOGAF) : la réplication de données Postgres cross-cloud mentionnée ci-dessus alimente directement le Data Migration diagram déjà prévu en Phase C (Data Architecture).
+
+---
+
+## Step 16 ter — Tests de charge & chaos engineering *(Sprints 9/10, pas de volet Sprint 6)*
+
+Objectif : simuler du vrai flux et pousser l'app en conditions extrêmes pour valider expérimentalement ce qui, jusqu'ici, n'est que construit — capacité réelle, comportement en panne, et fiabilité du monitoring (Step 15) censé tout voir.
+
+> **Révisé en session** : la version initiale prévoyait AWS Fault Injection Simulator (FIS) et Azure Chaos Studio dès le Sprint 6, avant Kubernetes. Retiré du plan — ces deux outils sont explicitement remplacés par Chaos Mesh dès que Kubernetes existe (Sprint 9), donc les construire en Sprint 6 aurait été un travail jetable avec une durée de vie de 2-3 sprints. Sauter directement à Chaos Mesh évite ce gâchis. k6 reste indépendant de Kubernetes (il tape juste sur l'ALB/App Service existants) mais n'a pas de raison d'être scindé en avance — regroupé entièrement en Sprint 10, là où Grafana/Prometheus/k6 sont déjà prévus ensemble (Step 18.6), plutôt que dispersé sur trois sprints.
+
+**Sprint 9 (Kubernetes) :**
+- **Chaos Mesh** — dès AKS/EKS en place, outil unique Kubernetes-natif et cloud-agnostique pour les expériences de chaos, unifié entre les deux clusters plutôt que deux outils propriétaires séparés.
+
+**Sprint 10 (SRE / plateforme) :**
+- **k6 — tous les profils** (smoke, load, stress, spike, soak) sur les endpoints critiques, en environnement `dev` uniquement — le soak (charge modérée soutenue sur plusieurs heures) est ce qui révèle les fuites (connexions DB non fermées, mémoire qui grossit) qu'un test court ne montre jamais.
+- **Corrélation test ↔ monitoring** — chaque test k6/Chaos Mesh est observé via CloudWatch/Application Insights et le futur Grafana unifié (Step 16 bis) : un test qui ne fait pas sonner l'alarme censée se déclencher est un bug de monitoring, pas un test réussi.
+- **Drill de bascule réel** — une fois le primaire+DR (Journal des décisions) en place, déclencher une vraie panne du primaire *sous charge k6* via Chaos Mesh, pour mesurer le RTO réel plutôt qu'un RTO théorique sur papier.
+
+> Prudence coût : ces tests génèrent des coûts réels (transfert NAT Gateway, IOPS RDS, requêtes). Cantonnés strictement à l'environnement `dev`, avec alerte de budget avant un stress test agressif et scale-down explicite juste après.
+
 ---
 
 ## Step 17 — Checklist de préparation production
@@ -496,9 +541,14 @@ Développeur → Git Push → Restore → Build → Tests unitaires
 **Sécurité**
 - [ ] IAM/RBAC least privilege
 - [ ] Chiffrement au repos (KMS / Key Vault)
-- [ ] TLS partout
+- [x] TLS partout — Azure App Service a HTTPS par défaut (certificat Microsoft) ; **AWS ALB en HTTPS depuis Sprint 6** avec un certificat auto-signé (pas de domaine réel disponible pour un certificat ACM validé par DNS) — navigateur affiche un avertissement de confiance, mais le trafic est chiffré ; HTTP redirige désormais vers HTTPS au lieu de servir en clair. À remplacer par un certificat DNS-validé dès qu'un domaine existe (voir README §9 pour le détail complet)
 - [ ] Rotation des secrets
-- [ ] Audit logging activé
+- [x] Audit logging activé
+- [x] NSG flow logs (Sprint 6, `modules/azure/flow-logs`)
+
+**Coûts**
+- [x] Garde-fou budget Azure — 7 €/mois sur `rg-arkcloud-dev`, arrêt automatique de PostgreSQL au dépassement (`modules/azure/cost-guard`)
+- [ ] Équivalent AWS — bloqué sur l'activation de Cost Explorer (accès refusé, `AccessDeniedException`)
 
 **Qualité, architecture & gouvernance** *(Step 18, Sprints 6-10)*
 - [ ] Quality gate SonarQube/SonarCloud bloquant en CI (bugs, vulnerabilities, code smells, couverture)
@@ -512,6 +562,22 @@ Développeur → Git Push → Restore → Build → Tests unitaires
 - [ ] Backstage — catalogue des services/APIs/ownership à jour
 - [ ] Grafana + Prometheus — dashboards de plateforme, alerting configuré
 - [ ] k6 — scénarios de tests de charge sur les endpoints critiques
+
+**Multi-cloud avancé** *(Step 16 bis, Sprints 6/9/10)*
+- [ ] VPN/interconnect privé entre VPC AWS et VNet Azure
+- [ ] Réplication PostgreSQL cross-cloud (primaire → secondaire)
+- [ ] Identité fédérée Entra ID → AWS IAM (SAML/OIDC)
+- [ ] Clé de signature JWT unifiée (secret unique, synchronisé Key Vault ↔ Secrets Manager)
+- [ ] Manifests Kubernetes identiques déployés sur AKS et EKS sans divergence
+- [ ] Politiques OPA/Gatekeeper communes aux deux clusters
+- [ ] Grafana en pane unique agrégeant CloudWatch + Application Insights/Log Analytics
+- [ ] Rapport de coût agrégé AWS Cost Explorer + Azure Cost Management
+
+**Tests de charge & chaos engineering** *(Step 16 ter, Sprints 9/10 — FIS/Chaos Studio écartés du plan, voir note de révision Step 16 ter)*
+- [ ] Chaos Mesh — unifié AKS/EKS (Sprint 9)
+- [ ] k6 — tous les profils : smoke/load/stress/spike/soak sur les endpoints critiques (dev uniquement, Sprint 10)
+- [ ] Alarmes de monitoring validées comme se déclenchant réellement pendant les tests
+- [ ] Drill de bascule primaire→DR sous charge réelle, RTO mesuré
 
 ---
 

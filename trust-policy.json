@@ -1,0 +1,18 @@
+{
+  "Version": "2012-10-17",
+  "Statement": [{
+    "Effect": "Allow",
+    "Principal": { "Federated": "arn:aws:iam::386275436389:oidc-provider/token.actions.githubusercontent.com" },
+    "Action": "sts:AssumeRoleWithWebIdentity",
+    "Condition": {
+      "StringEquals": {
+        "token.actions.githubusercontent.com:aud": "sts.amazonaws.com",
+        "token.actions.githubusercontent.com:sub": [
+          "repo:epiph11@183244781/ArkCloudApp@1297716069:environment:development",
+          "repo:epiph11@183244781/ArkCloudApp@1297716069:environment:staging",
+          "repo:epiph11@183244781/ArkCloudApp@1297716069:environment:production"
+        ]
+      }
+    }
+  }]
+}
