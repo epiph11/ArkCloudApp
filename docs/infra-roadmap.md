@@ -17,6 +17,7 @@
 | Outillage qualité de code / architecture / dette technique / gouvernance d'entreprise | Non spécifié | **Distribué dans les Sprints 6 à 10 existants** (pas de sprint dédié) — chaque outil rejoint le sprint où il a du contenu réel à analyser plutôt que d'attendre un sprint isolé en fin de roadmap. Stack majoritairement gratuite/open-source ; **NDepend** est le seul outil payant retenu (essai 14 jours puis licence ~500-900$/an), pour l'analyse de dépendances/cycles/SOLID spécifique .NET qu'aucun outil gratuit n'égale vraiment. **LeanIX et Sparx Enterprise Architect écartés** : outils de cartographie de portefeuille multi-applications (dizaines d'apps, plusieurs business units) — hors d'échelle pour un produit unique, même à maturité Sprint 10. Détail complet : Step 18. |
 | Adoption TOGAF 10.0 | Non spécifié | **Nouveau Sprint 11, dédié, en fin de roadmap** (pas d'interruption du Sprint 5 en cours ni des Sprints 6-10 déjà planifiés) — rigueur complète demandée : le cycle ADM est suivi dans son intégralité (Preliminary + Phases A à H + Requirements Management), avec tous les livrables formels de chaque phase, pas une version allégée. Choix explicite de démarrer ce sprint une fois la plateforme réellement construite (Azure + AWS + Angular + microservices + Kubernetes + SRE), pour que les Architectures Business/Data/Application/Technology documentent un système réel plutôt qu'anticipent un système qui n'existe pas encore. Les documents déjà produits (README, ce roadmap, `docs/architecture.md`, les états des lieux Sprint 1-4 et Sprint 4/5) seront **réécrits en terminologie/structure TOGAF** dans le cadre de ce sprint plutôt que dupliqués à côté. Détail complet : Step 19. |
 | Garde-fou coût Azure (`modules/azure/cost-guard`) | Non spécifié | **Décision prise en session (août 2026)**, suite à la découverte de deux plans App Service Basic B1 non partagés tournant en continu : un budget Azure Cost Management de **7 €/mois**, scopé au resource group `rg-arkcloud-dev` (pas à l'abonnement — le storage account Terraform state ne doit pas compter). À 100 % de dépassement, un Automation Runbook (identité managée, least-privilege scopé au serveur Postgres uniquement) **arrête PostgreSQL Flexible Server automatiquement** — ce n'est **pas** une bascule App Service vers un tier moins cher : vérifié en direct que Free (F1) et Shared (D1) ne supportent pas l'intégration VNet régionale dont l'API a besoin pour atteindre Postgres en privé (`az appservice plan update --sku F1` échoue tant que l'app y est rattachée), donc Basic B1 est déjà le tier le moins cher qui reste fonctionnel côté App Service — pas de palier de repli gracieux à automatiser là. Limite connue : les données de coût Azure ne sont pas temps réel (latence de plusieurs heures documentée par Microsoft), donc le déclenchement peut arriver après que le seuil soit déjà dépassé, avec un peu de dépense supplémentaire entre-temps. Côté AWS, rien de construit pour l'instant — Cost Explorer n'est pas encore activé sur le compte, donc pas de vrais chiffres pour dimensionner un seuil équivalent. |
+| Communication inter-services, fitness functions & ADR | Non spécifiés — trois absences du roadmap d'origine | **Ajoutés en session (août 2026)** après revue du plan sous l'angle « qu'attendrait un architecte senior de ce livrable ». Trois manques structurants, chacun rattaché au sprint où il a du contenu réel : (1) **le Sprint 8 découpait en microservices sans jamais décider comment ils communiquent** — ni synchrone/asynchrone, ni propriété des données, ni cohérence transactionnelle, ce qui mène mécaniquement au « monolithe distribué ». Comblé par le **Step 16 quater** : Kafka comme log d'événements (et non file de messages — la rejouabilité et les consommateurs multiples sont le critère de choix face à RabbitMQ/SQS), plus les mécanismes sans lesquels un broker ne suffit pas : transactional outbox, idempotence des consommateurs, Schema Registry, dead letter topic, cohérence à terme assumée. (2) **Aucune caractéristique d'architecture n'était nommée, priorisée ni mesurée** — l'outillage qualité couvrait le code et les dépendances, jamais la performance/disponibilité/coût comme propriétés vérifiables. Comblé par le **Step 18.7** : au maximum trois caractéristiques prioritaires explicitement retenues (et celles sacrifiées documentées), chacune adossée à une fitness function bloquante en CI plutôt qu'à un rapport qu'on lit à la main. (3) **Aucun format ADR** — les décisions vivaient dans ce journal et dans des commentaires de code, sans traçabilité par décision ni conséquences négatives assumées par écrit. `docs/adr/` devient l'entrée de l'Architecture Repository TOGAF du Sprint 11, plutôt qu'un travail parallèle à réconcilier ensuite. **Trois manques supplémentaires comblés dans la foulée** : (4) **contrats d'API et résilience des appels synchrones** (Step 16 quinquies) — versionnement explicite, tests de contrat Pact pour que casser un consommateur bloque la CI plutôt que d'apparaître en production, et timeouts/retry-backoff-jitter/circuit breaker/bulkhead via Polly, chacun devant être *prouvé* par une expérience Chaos Mesh plutôt que déclaré ; (5) **stratégie de déploiement** (Step 16 sexies) — le pipeline déployait sans jamais limiter le rayon d'impact d'une mauvaise version : blue-green au Sprint 9, canary avec rollback automatique sur métriques au Sprint 10, feature flags, et surtout migrations de base compatibles en avant (deux versions du code contre une seule base pendant un canary — le vrai point dur) ; (6) **analyse de risque structurée** (risk storming, dans le Step 18.7) — les risques de ce projet étaient tous découverts au moment où ils se manifestaient ; désormais cotés probabilité × impact à froid, avec décision explicite (mitiger/accepter/transférer/éliminer) tracée en ADR, un risque accepté et documenté étant une décision d'architecture tandis qu'un risque accepté et tu est un accident en attente. |
 | Architecture cible Azure/AWS (post-Sprint 5) | Non spécifié — le roadmap ne définissait aucun état final pour la coexistence des deux clouds | **Décision prise en session (août 2026)** : Azure et AWS restent **parallèles et actifs simultanément à court terme** (état actuel — deux copies complètes et indépendantes du stack, sans lien fonctionnel : bases séparées, secrets/clés JWT séparés, aucun routage ni bascule entre elles). **Cible à terme : primaire + DR (bascule)**, pas un actif-actif symétrique — choix cohérent avec la pratique entreprise réelle (coût/complexité de l'actif-actif rarement justifié). Le patron retenu pour la migration future est le **warm standby** : un cloud primaire sert tout le trafic, le secondaire tourne à capacité réduite avec réplication de données en continu, prêt à être promu. Trois chantiers identifiés comme bloquants pour cette migration, non commencés : (1) réplication logique PostgreSQL cross-cloud primaire→secondaire (le vrai point dur — la donnée, pas le compute), (2) couche DNS/health-check agnostique au-dessus des deux clouds (ni Traffic Manager ni Route 53 seuls ne supervisent nativement l'autre cloud), (3) unification de la clé de signature JWT entre Key Vault et Secrets Manager (sinon un token émis par un cloud est invalide sur l'autre après bascule). Pas de sprint numéroté attribué pour l'instant — candidat naturel pour le travail Data Architecture du Sprint 11 (TOGAF), qui prévoit déjà un Data Migration diagram Azure↔AWS. |
 
 ---
@@ -30,11 +31,11 @@
 | 3 | Auth JWT + Blazor | — | ✅ Fait |
 | 4 | **CI/CD + Azure** (ce document, Steps 1–9 partie Azure) | — | ✅ Clôturé (28/07/2026) |
 | 5 | AWS foundation (Steps 10–12) | — | ✅ Clôturé |
-| 6 | Sécurité cloud avancée (Step 16) | SonarQube/SonarCloud, NDepend *(payant)*, ArchUnitNET, Snyk, Renovate | ⏳ À venir |
+| 6 | Sécurité cloud avancée (Step 16) | SonarQube/SonarCloud, NDepend *(payant)*, ArchUnitNET, Snyk, Renovate, **ADR + caractéristiques d'architecture priorisées (Step 18.7)** | 🔄 En cours |
 | 7 | Angular enterprise | Compodoc, extension SonarCloud au TypeScript/Angular | ⏳ À venir |
-| 8 | Microservices | Structurizr Lite + Mermaid (C4), Swagger/OpenAPI + Redocly par service | ⏳ À venir |
-| 9 | Kubernetes (Step 9 pour de vrai, sur cluster managé) | Open Policy Agent / Gatekeeper | ⏳ À venir |
-| 10 | SRE / plateforme | Grafana + Prometheus, k6, Backstage | ⏳ À venir |
+| 8 | Microservices **+ messagerie Kafka & patterns distribués (16 quater), contrats d'API & résilience (16 quinquies)** | Structurizr Lite + Mermaid (C4), Swagger/OpenAPI + Redocly par service, Schema Registry, Pact, Polly | ⏳ À venir |
+| 9 | Kubernetes (Step 9 pour de vrai, sur cluster managé) **+ blue-green (16 sexies)** | Open Policy Agent / Gatekeeper | ⏳ À venir |
+| 10 | SRE / plateforme **+ canary automatisé sur métriques & feature flags (16 sexies)** | Grafana + Prometheus, k6, Backstage, **fitness functions performance/coût bloquantes en CI (Step 18.7)** | ⏳ À venir |
 | 11 | **Adoption TOGAF 10.0 & réalignement architecture d'entreprise** (Step 19) | Cycle ADM complet (Preliminary + A à H), tous livrables formels | ⏳ À venir (fin de roadmap) |
 
 ---
@@ -498,6 +499,145 @@ Objectif : simuler du vrai flux et pousser l'app en conditions extrêmes pour va
 
 ---
 
+## Step 16 quater — Communication inter-services & messagerie *(Sprint 8, prérequis du découpage microservices)*
+
+> **Trou identifié en session (août 2026)** : le Sprint 8 prévoyait de découper le monolithe en microservices sans jamais décider **comment ces services communiquent**. C'est le manque le plus structurant du roadmap tel qu'il était — découper sans trancher synchrone/asynchrone, ni la propriété des données, ni la cohérence transactionnelle, produit un « monolithe distribué » : tous les inconvénients du distribué, aucun de ses bénéfices. Cette section comble ce trou.
+
+### Le choix de style, avant l'outil
+
+La question n'est pas « Kafka ou pas Kafka » mais **quelle interaction pour quel besoin** :
+
+| Besoin | Style | Justification |
+|---|---|---|
+| Lecture immédiate nécessaire à la réponse (ex. l'API commandes doit valider qu'un produit existe) | **Synchrone (REST/gRPC)** | Le résultat est requis pour répondre à l'utilisateur ; passer par un broker n'apporterait qu'une latence et une complexité inutiles. |
+| Notification d'un fait accompli (ex. « commande payée ») que d'autres services doivent traiter sans bloquer l'appelant | **Asynchrone (événements)** | C'est le cas d'usage réel de Kafka ici — le service commandes n'a pas à savoir qui écoute ni à attendre. |
+| Workflow multi-services avec besoin de compensation (ex. commande → paiement → stock → expédition) | **Saga (orchestration ou chorégraphie)** | Il n'y a pas de transaction ACID distribuée possible entre bases séparées : soit un orchestrateur explicite, soit une chaîne d'événements avec compensations. À trancher explicitement, pas à subir. |
+
+### Kafka — pourquoi, et pourquoi Sprint 8 et pas avant
+
+**Apache Kafka** (managé : Azure Event Hubs avec l'API Kafka / Amazon MSK, ou self-hosted sur Kubernetes au Sprint 9) comme **log d'événements durable**, pas comme simple file de messages. Ce que ça apporte concrètement ici :
+
+- **Découplage temporel** — un consommateur arrêté ne fait pas perdre d'événements, il rattrape à son rythme.
+- **Rejouabilité** — le log est conservé, donc un nouveau service peut se brancher et rejouer l'historique ; une file classique (RabbitMQ/SQS) supprime le message après consommation.
+- **Plusieurs consommateurs indépendants** du même flux, chacun avec son propre offset.
+
+Pas avant le Sprint 8 : avec un seul service applicatif, un broker n'a rien à transporter — ce serait de l'infrastructure sans usage, exactement le travers évité pour Backstage (Sprint 10) et Structurizr (Sprint 8).
+
+**Alternative écartée** : RabbitMQ / Azure Service Bus / SQS — parfaits pour du travail en file (une tâche, un consommateur, puis suppression), mais sans rejouabilité ni consommation multiple du même flux. Le besoin ici (plusieurs services réagissant au même fait métier, historique conservé) est un log d'événements, pas une file.
+
+### Ce que Kafka seul ne règle pas — les mécanismes à construire avec
+
+Un broker ne rend pas un système distribué correct. Les patterns ci-dessous sont ce qui sépare « on a mis Kafka » d'une architecture événementielle réellement fiable :
+
+- **Transactional outbox** — écrire en base *et* publier un événement ne peut pas être atomique entre deux systèmes. L'événement est écrit dans une table `outbox` **dans la même transaction** que le changement métier, puis publié par un relais séparé. Sans ça : commandes enregistrées dont l'événement n'est jamais parti, ou l'inverse.
+- **Idempotence des consommateurs** — Kafka garantit *at-least-once*, donc un message *sera* rejoué un jour. Chaque consommateur doit produire le même résultat s'il traite deux fois le même événement (clé d'idempotence persistée, pas juste « on espère »).
+- **Schémas versionnés des événements** (Schema Registry, Avro/JSON Schema) — un événement est un **contrat public** entre services, plus dur à changer qu'une API REST car les consommateurs sont invisibles de l'émetteur. Sans registre, un champ renommé casse silencieusement un service qu'on avait oublié.
+- **Dead letter topic + politique de retry** — que se passe-t-il pour un message qu'un consommateur n'arrive jamais à traiter ? Sans DLQ explicite, soit il bloque la partition indéfiniment, soit il est perdu.
+- **Cohérence à terme assumée** — les lectures cross-services renvoient des données potentiellement en retard. C'est une propriété à documenter et à rendre acceptable métier, pas un bug à corriger.
+
+### Sprint 8 — décisions à formaliser (chacune en ADR, voir Step 18.7)
+
+- [ ] Granularité des services — quels services, et **pourquoi** ceux-là (facteurs de découpage vs facteurs de regroupement, explicités)
+- [ ] Propriété des données — un service = ses tables, aucun accès direct à la base d'un autre
+- [ ] Communication synchrone vs asynchrone, cas par cas, selon la grille ci-dessus
+- [ ] Saga : orchestration ou chorégraphie (et pourquoi) pour le cycle de vie d'une commande
+- [ ] Kafka managé vs self-hosted sur Kubernetes (Sprint 9)
+- [ ] Outbox, idempotence, Schema Registry, DLQ — construits **avec** le premier producteur, pas ajoutés après coup
+- [ ] Résilience des appels synchrones restants : timeouts, retry avec backoff, circuit breaker (Polly côté .NET)
+
+---
+
+## Step 16 quinquies — Contrats d'API & résilience des appels synchrones *(Sprint 8)*
+
+> Complète le Step 16 quater : celui-là traite de ce qui transite entre services, celui-ci de ce qui se passe quand le service d'en face change ou ne répond pas.
+
+### Versionnement d'API et tests de contrat
+
+Dès qu'un service a plus d'un consommateur, son API devient un contrat qu'on ne peut plus changer unilatéralement. Le risque réel n'est pas de casser un consommateur connu — c'est de casser celui qu'on avait oublié.
+
+- [ ] **Stratégie de versionnement explicite** — versionnement dans l'URL (`/v1/orders`) retenu par défaut : le plus lisible dans les logs, les traces et les métriques, au prix d'URLs moins « pures » que la négociation par header. À trancher en ADR, pas par défaut implicite.
+- [ ] **Règle de compatibilité** — ajouts uniquement (nouveau champ optionnel) sur une version existante ; tout retrait ou renommage impose une nouvelle version. Vaut aussi bien pour les APIs REST que pour les **schémas d'événements Kafka** (Step 16 quater), qui sont plus dangereux encore : l'émetteur ne sait pas qui consomme.
+- [ ] **Tests de contrat (Pact)** — le consommateur publie ses attentes, le producteur les vérifie en CI. Le producteur ne peut pas merger un changement qui casse un consommateur, même sans jamais lire son code. C'est ce qui remplace « on espère que personne n'utilisait ce champ ».
+- [ ] **Politique de dépréciation** — une version obsolète est annoncée, instrumentée (métrique d'usage résiduel par version), puis retirée **quand la métrique tombe à zéro** — pas à une date arbitraire.
+
+### Résilience des appels synchrones restants
+
+Tous les appels ne deviennent pas asynchrones (voir la grille du Step 16 quater). Ceux qui restent synchrones traversent le réseau : ils échoueront, et le défaut d'un `HttpClient` .NET (attente quasi infinie, aucun retry) est le pire comportement possible en distribué.
+
+- [ ] **Timeouts explicites partout** — un appel sans timeout transforme la lenteur d'un service en panne de tous ses appelants. À définir par appel selon le budget de latence de la requête entrante, pas une valeur globale.
+- [ ] **Retry avec backoff exponentiel + jitter** — uniquement sur les erreurs *transitoires* (5xx, timeout réseau), jamais sur une 4xx. Le jitter est indispensable : sans lui, tous les clients réessaient en même temps et achèvent le service qui se relevait.
+- [ ] **Circuit breaker** — après N échecs consécutifs, arrêter d'appeler pendant un temps donné et échouer immédiatement. Évite qu'un service en panne consomme les threads/connexions de tous ses appelants jusqu'à les faire tomber aussi (défaillance en cascade).
+- [ ] **Bulkhead** — cloisonner les pools de connexions par dépendance : un service lent ne doit pas pouvoir épuiser les ressources partagées et entraîner les autres.
+- [ ] **Dégradation gracieuse** — pour chaque dépendance, décider explicitement ce que fait l'appelant quand elle est indisponible : valeur par défaut, cache périmé servi, ou échec propre. Ne jamais laisser ce comportement émerger par accident.
+- [ ] Implémentation .NET : **Polly** (via `Microsoft.Extensions.Http.Resilience`), branché sur les `HttpClient` typés déjà en place (`ArkCloud.Blazor/Program.cs` en a cinq).
+
+> **Validation, pas déclaration** : chacun de ces mécanismes doit être *prouvé* par une expérience Chaos Mesh au Sprint 9 (Step 16 ter) — un circuit breaker jamais vu s'ouvrir en conditions réelles est une hypothèse, pas une protection.
+
+---
+
+## Step 16 sexies — Stratégie de déploiement & rayon d'impact *(Sprint 9-10)*
+
+> **Quatrième trou** : le roadmap construit un pipeline qui déploie, mais ne dit nulle part **comment limiter les dégâts d'une mauvaise version** ni revenir en arrière vite. Aujourd'hui, un `terraform apply` ou un push d'image remplace la version en production d'un coup, pour 100 % du trafic — c'est acceptable en dev, pas au-delà.
+
+- [ ] **Séparer déploiement et activation** — déployer du code n'est pas le mettre en service. C'est ce qui rend tout le reste possible.
+- [ ] **Blue-green** (Sprint 9, natif sur Kubernetes) — deux environnements identiques, bascule du trafic en une opération, retour arrière tout aussi rapide. Simple, mais double le coût pendant la bascule.
+- [ ] **Canary / déploiement progressif** (Sprint 10) — 1 %, puis 10 %, puis 100 % du trafic, avec **arrêt automatique sur métriques** : si le taux d'erreur ou la latence de la nouvelle version dépasse le seuil, rollback sans intervention humaine. C'est la version utile du canary ; sans automatisation sur métriques, ce n'est qu'un déploiement lent.
+- [ ] **Feature flags** — découpler la livraison de code de l'activation de fonctionnalité. Permet de désactiver une fonctionnalité problématique sans redéployer, et de tester en production sur un sous-ensemble d'utilisateurs. Attention à la dette : chaque flag a une date de retrait, sinon ils s'accumulent en branches mortes.
+- [ ] **Migrations de base compatibles en avant** — le point dur réel : pendant un canary, deux versions du code tournent contre **une seule** base. Toute migration doit être compatible avec l'ancienne version (ajout de colonne nullable, jamais de renommage direct — pattern expand/contract en deux déploiements).
+- [ ] **Critère de rollback documenté** — quelle métrique, quel seuil, quel délai déclenchent un retour arrière, décidé **avant** l'incident et non pendant.
+
+---
+
+## Step 18.7 — Fitness functions & caractéristiques d'architecture *(Sprint 6 → 10, continu)*
+
+> **Deuxième trou identifié en session** : le roadmap outillait la qualité de code (SonarQube), les dépendances (Snyk) et l'architecture logicielle statique (NDepend/ArchUnitNET) — mais rien ne vérifiait automatiquement que les **caractéristiques d'architecture** (performance, disponibilité, coût, sécurité) restent dans leurs limites au fil des livraisons. C'est précisément ce que sont les fitness functions.
+
+### D'abord : nommer et prioriser les caractéristiques
+
+Une fitness function n'a de sens que si elle mesure une caractéristique explicitement retenue. Aucune architecture ne peut tout maximiser — le premier livrable est donc de **choisir**, et d'assumer ce qui n'est pas prioritaire :
+
+- [ ] Lister les caractéristiques candidates du système (performance, disponibilité, scalabilité, sécurité, testabilité, déployabilité, évolutivité, observabilité, coût d'exploitation…)
+- [ ] **En retenir au maximum trois comme prioritaires**, avec la justification métier ; documenter explicitement celles délibérément sacrifiées
+- [ ] Rendre chacune **mesurable** — « l'app doit être rapide » n'est pas une caractéristique, « p95 de `/api/orders` < 500 ms sous 50 utilisateurs concurrents » en est une
+
+### Ensuite : une fitness function par caractéristique retenue
+
+Une fitness function est un **test automatisé de la caractéristique**, exécuté en CI, qui casse le build quand l'architecture dérive — exactement comme un test unitaire casse le build quand le comportement dérive.
+
+| Type | Déjà en place | À construire |
+|---|---|---|
+| **Structurelle** | ArchUnitNET (règles de dépendance entre couches, Sprint 6) | Étendre aux frontières de services au Sprint 8 : un service ne référence jamais le namespace interne d'un autre |
+| **Sécurité** | Checkov, Trivy, Snyk (bloquants en CI) | Fitness function « aucun secret en clair » et « TLS partout » vérifiée sur l'infra déployée, pas seulement sur le code |
+| **Performance** | — | Seuil k6 en CI (Sprint 10) : la PR échoue si p95 dépasse le seuil défini, plutôt qu'un test de charge dont on regarde le résultat à la main |
+| **Disponibilité / résilience** | — | Chaos Mesh (Sprint 9) exécuté en pipeline avec assertion : le système reste dans son SLO pendant l'expérience, sinon échec |
+| **Coût** | Budget Azure 7 €/mois (garde-fou runtime, Sprint 6) | Fitness function CI : `infracost` sur le plan Terraform, PR bloquée si le delta dépasse un seuil — détecte la dérive **avant** l'apply, pas après la facture |
+| **Observabilité** | Alarmes CloudWatch / Application Insights | Vérification automatisée qu'une alarme se déclenche réellement pendant un test de charge (déjà prévu Step 16 ter, à formaliser en fitness function) |
+
+### Architecture Decision Records (ADR) — le support de tout le reste
+
+> **Troisième trou** : les décisions d'architecture de ce projet vivent aujourd'hui dans le « Journal des décisions » de ce document et dans des commentaires de code (souvent excellents, mais dispersés). Aucun format ADR standard, aucune traçabilité par décision.
+
+- [ ] Adopter un format ADR minimal dans `docs/adr/` — un fichier par décision : contexte, options envisagées, décision, **conséquences assumées** (positives *et* négatives)
+- [ ] Rétro-documenter les décisions structurantes déjà prises (repo séparé pour Terraform, ECR provisoire vs JFrog, multi-cloud parallèle puis primaire+DR, certificat auto-signé sur l'ALB, rotation automatique Postgres mais pas JWT…)
+- [ ] Toute décision du Sprint 8 (granularité, saga, Kafka) documentée en ADR **au moment de la décision**, pas reconstituée après
+- [ ] Les ADR deviennent l'entrée de l'Architecture Repository TOGAF au Sprint 11 (Step 19) plutôt qu'un travail parallèle
+
+### Analyse de risque structurée (risk storming) — Sprint 6, puis à chaque changement structurant
+
+> **Cinquième trou** : les risques de ce projet sont réels et connus au coup par coup (mots de passe exposés dans le chat, certificat auto-signé, deux dossiers Terraform divergents, PAT qui expire…), mais toujours découverts **au moment où ils se manifestent**. Aucune démarche ne les identifie à froid, avant l'incident.
+
+Le principe : évaluer le risque **par zone du système**, de façon délibérée et répétable, plutôt que d'attendre qu'un incident le révèle. Sur un projet solo, l'exercice collectif se réduit à une revue disciplinée — mais la matrice et la traçabilité restent.
+
+- [ ] **Identifier les zones de risque** par caractéristique d'architecture retenue (Step 18.7) : disponibilité, sécurité, perte de données, performance, dette/évolutivité, coût
+- [ ] **Coter chaque risque** sur deux axes — probabilité × impact — en produisant une note de criticité, plutôt qu'un ressenti « ça craint un peu »
+- [ ] **Décider explicitement** pour chaque risque critique : mitiger, accepter (avec justification écrite), transférer, ou éliminer. Un risque accepté et documenté est une décision d'architecture ; un risque accepté et tu est un accident en attente.
+- [ ] **Rattacher à un ADR** chaque mitigation retenue, et à une fitness function chaque risque qui peut être surveillé automatiquement
+- [ ] **Refaire l'exercice** à chaque changement structurant — notamment au Sprint 8 (le passage au distribué crée une famille entière de risques nouveaux : partitions réseau, cohérence à terme, défaillance en cascade) et au Sprint 9 (Kubernetes)
+
+**Risques déjà identifiables aujourd'hui, à formaliser lors du premier exercice** : source unique de défaillance sur la base (Postgres Burstable mono-instance, pas de HA), certificat auto-signé sur l'ALB AWS, absence de réplication cross-cloud alors que le DR est une cible déclarée, `Jwt:Key` non rotatable sans déconnecter tous les utilisateurs, dépendance à un PAT GitHub personnel dans le chemin de déploiement.
+
+---
+
 ## Step 17 — Checklist de préparation production
 
 **Infrastructure**
@@ -542,7 +682,7 @@ Objectif : simuler du vrai flux et pousser l'app en conditions extrêmes pour va
 - [ ] IAM/RBAC least privilege
 - [ ] Chiffrement au repos (KMS / Key Vault)
 - [x] TLS partout — Azure App Service a HTTPS par défaut (certificat Microsoft) ; **AWS ALB en HTTPS depuis Sprint 6** avec un certificat auto-signé (pas de domaine réel disponible pour un certificat ACM validé par DNS) — navigateur affiche un avertissement de confiance, mais le trafic est chiffré ; HTTP redirige désormais vers HTTPS au lieu de servir en clair. À remplacer par un certificat DNS-validé dès qu'un domaine existe (voir README §9 pour le détail complet)
-- [ ] Rotation des secrets
+- [x] Rotation des secrets — **mots de passe Postgres : rotation automatique tous les 90 jours sur les deux clouds** (Sprint 6, `modules/azure/secret-rotation` via Automation Runbook + schedule, `modules/aws/secret-rotation` via Secrets Manager + Lambda custom). `Jwt:Key` et `GHCR_PAT` restent manuels par décision explicite (rotation JWT = déconnexion de tous les utilisateurs sans support multi-clés ; PAT GitHub = aucune API cloud pour l'automatiser), couverts par les rappels d'échéance automatisés (`.github/workflows/secret-expiry-check.yml` + `.github/secrets-inventory.json`). Détail complet README §10
 - [x] Audit logging activé
 - [x] NSG flow logs (Sprint 6, `modules/azure/flow-logs`)
 
