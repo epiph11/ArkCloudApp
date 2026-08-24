@@ -18,6 +18,7 @@
 | Adoption TOGAF 10.0 | Non spécifié | **Nouveau Sprint 11, dédié, en fin de roadmap** (pas d'interruption du Sprint 5 en cours ni des Sprints 6-10 déjà planifiés) — rigueur complète demandée : le cycle ADM est suivi dans son intégralité (Preliminary + Phases A à H + Requirements Management), avec tous les livrables formels de chaque phase, pas une version allégée. Choix explicite de démarrer ce sprint une fois la plateforme réellement construite (Azure + AWS + Angular + microservices + Kubernetes + SRE), pour que les Architectures Business/Data/Application/Technology documentent un système réel plutôt qu'anticipent un système qui n'existe pas encore. Les documents déjà produits (README, ce roadmap, `docs/architecture.md`, les états des lieux Sprint 1-4 et Sprint 4/5) seront **réécrits en terminologie/structure TOGAF** dans le cadre de ce sprint plutôt que dupliqués à côté. Détail complet : Step 19. |
 | Garde-fou coût Azure (`modules/azure/cost-guard`) | Non spécifié | **Décision prise en session (août 2026)**, suite à la découverte de deux plans App Service Basic B1 non partagés tournant en continu : un budget Azure Cost Management de **7 €/mois**, scopé au resource group `rg-arkcloud-dev` (pas à l'abonnement — le storage account Terraform state ne doit pas compter). À 100 % de dépassement, un Automation Runbook (identité managée, least-privilege scopé au serveur Postgres uniquement) **arrête PostgreSQL Flexible Server automatiquement** — ce n'est **pas** une bascule App Service vers un tier moins cher : vérifié en direct que Free (F1) et Shared (D1) ne supportent pas l'intégration VNet régionale dont l'API a besoin pour atteindre Postgres en privé (`az appservice plan update --sku F1` échoue tant que l'app y est rattachée), donc Basic B1 est déjà le tier le moins cher qui reste fonctionnel côté App Service — pas de palier de repli gracieux à automatiser là. Limite connue : les données de coût Azure ne sont pas temps réel (latence de plusieurs heures documentée par Microsoft), donc le déclenchement peut arriver après que le seuil soit déjà dépassé, avec un peu de dépense supplémentaire entre-temps. Côté AWS, rien de construit pour l'instant — Cost Explorer n'est pas encore activé sur le compte, donc pas de vrais chiffres pour dimensionner un seuil équivalent. |
 | Communication inter-services, fitness functions & ADR | Non spécifiés — trois absences du roadmap d'origine | **Ajoutés en session (août 2026)** après revue du plan sous l'angle « qu'attendrait un architecte senior de ce livrable ». Trois manques structurants, chacun rattaché au sprint où il a du contenu réel : (1) **le Sprint 8 découpait en microservices sans jamais décider comment ils communiquent** — ni synchrone/asynchrone, ni propriété des données, ni cohérence transactionnelle, ce qui mène mécaniquement au « monolithe distribué ». Comblé par le **Step 16 quater** : Kafka comme log d'événements (et non file de messages — la rejouabilité et les consommateurs multiples sont le critère de choix face à RabbitMQ/SQS), plus les mécanismes sans lesquels un broker ne suffit pas : transactional outbox, idempotence des consommateurs, Schema Registry, dead letter topic, cohérence à terme assumée. (2) **Aucune caractéristique d'architecture n'était nommée, priorisée ni mesurée** — l'outillage qualité couvrait le code et les dépendances, jamais la performance/disponibilité/coût comme propriétés vérifiables. Comblé par le **Step 18.7** : au maximum trois caractéristiques prioritaires explicitement retenues (et celles sacrifiées documentées), chacune adossée à une fitness function bloquante en CI plutôt qu'à un rapport qu'on lit à la main. (3) **Aucun format ADR** — les décisions vivaient dans ce journal et dans des commentaires de code, sans traçabilité par décision ni conséquences négatives assumées par écrit. `docs/adr/` devient l'entrée de l'Architecture Repository TOGAF du Sprint 11, plutôt qu'un travail parallèle à réconcilier ensuite. **Trois manques supplémentaires comblés dans la foulée** : (4) **contrats d'API et résilience des appels synchrones** (Step 16 quinquies) — versionnement explicite, tests de contrat Pact pour que casser un consommateur bloque la CI plutôt que d'apparaître en production, et timeouts/retry-backoff-jitter/circuit breaker/bulkhead via Polly, chacun devant être *prouvé* par une expérience Chaos Mesh plutôt que déclaré ; (5) **stratégie de déploiement** (Step 16 sexies) — le pipeline déployait sans jamais limiter le rayon d'impact d'une mauvaise version : blue-green au Sprint 9, canary avec rollback automatique sur métriques au Sprint 10, feature flags, et surtout migrations de base compatibles en avant (deux versions du code contre une seule base pendant un canary — le vrai point dur) ; (6) **analyse de risque structurée** (risk storming, dans le Step 18.7) — les risques de ce projet étaient tous découverts au moment où ils se manifestaient ; désormais cotés probabilité × impact à froid, avec décision explicite (mitiger/accepter/transférer/éliminer) tracée en ADR, un risque accepté et documenté étant une décision d'architecture tandis qu'un risque accepté et tu est un accident en attente. |
+| Sécurité applicative, données personnelles, chaîne d'approvisionnement, observabilité distribuée, SLO et autoscaling | Non spécifiés — six absences | **Ajoutés en session (août 2026)**, seconde passe de revue « ce livrable doit être digne d'une entreprise leader ». (1) **STRIDE** (Step 16 septies) — le risk storming couvre le risque d'architecture, pas la menace orientée attaquant ; quatre menaces déjà identifiables sans attendre l'exercice (certificat auto-signé, `Jwt:Key` sans `kid`, PAT GitHub dans le chemin de déploiement, absence de rate limiting en amont). (2) **Données personnelles/RGPD** — le système stocke clients et commandes et rien ne le prenait en compte : classification, rétention, droit à l'effacement **y compris dans les sauvegardes et les logs** (le point dur), résidence UE figée comme contrainte et non comme coïncidence. (3) **Chaîne d'approvisionnement** — Trivy/Snyk/Checkov scannent ce qu'on écrit, rien ne prouve ce qu'on livre : SBOM à chaque build, signature Cosign keyless via l'OIDC déjà en place, et surtout **vérification à l'admission Kubernetes** (Sprint 9) qui transforme la signature en contrôle réel. (4) **Restauration testée** (16 septies) — backups activés depuis les Sprints 4 et 5, jamais restaurés ; une sauvegarde jamais restaurée est une hypothèse, pas une sauvegarde, et le cas « restaurer après rotation automatique de mot de passe » doit être explicitement traité. (5) **Traçabilité distribuée** (Step 16 octies) — deux piliers sur trois seulement ; l'en-tête `X-Correlation-Id` déjà émis par l'API sert de fondation, à raccorder au `trace_id` OpenTelemetry plutôt que maintenu en parallèle, avec propagation du contexte y compris **à travers Kafka**. (6) **SLI/SLO/error budgets et autoscaling** — le Sprint 10 s'intitulait « SRE » sans contenir un seul objectif de service, et aucune règle d'autoscaling n'existe nulle part : sous charge, le système ne s'adapte pas, il tombe. Borne maximale d'autoscaling posée comme garde-fou coût, cohérente avec le budget de 7 €/mois. |
 | Architecture cible Azure/AWS (post-Sprint 5) | Non spécifié — le roadmap ne définissait aucun état final pour la coexistence des deux clouds | **Décision prise en session (août 2026)** : Azure et AWS restent **parallèles et actifs simultanément à court terme** (état actuel — deux copies complètes et indépendantes du stack, sans lien fonctionnel : bases séparées, secrets/clés JWT séparés, aucun routage ni bascule entre elles). **Cible à terme : primaire + DR (bascule)**, pas un actif-actif symétrique — choix cohérent avec la pratique entreprise réelle (coût/complexité de l'actif-actif rarement justifié). Le patron retenu pour la migration future est le **warm standby** : un cloud primaire sert tout le trafic, le secondaire tourne à capacité réduite avec réplication de données en continu, prêt à être promu. Trois chantiers identifiés comme bloquants pour cette migration, non commencés : (1) réplication logique PostgreSQL cross-cloud primaire→secondaire (le vrai point dur — la donnée, pas le compute), (2) couche DNS/health-check agnostique au-dessus des deux clouds (ni Traffic Manager ni Route 53 seuls ne supervisent nativement l'autre cloud), (3) unification de la clé de signature JWT entre Key Vault et Secrets Manager (sinon un token émis par un cloud est invalide sur l'autre après bascule). Pas de sprint numéroté attribué pour l'instant — candidat naturel pour le travail Data Architecture du Sprint 11 (TOGAF), qui prévoit déjà un Data Migration diagram Azure↔AWS. |
 
 ---
@@ -31,11 +32,11 @@
 | 3 | Auth JWT + Blazor | — | ✅ Fait |
 | 4 | **CI/CD + Azure** (ce document, Steps 1–9 partie Azure) | — | ✅ Clôturé (28/07/2026) |
 | 5 | AWS foundation (Steps 10–12) | — | ✅ Clôturé |
-| 6 | Sécurité cloud avancée (Step 16) | SonarQube/SonarCloud, NDepend *(payant)*, ArchUnitNET, Snyk, Renovate, **ADR + caractéristiques d'architecture priorisées (Step 18.7)** | 🔄 En cours |
+| 6 | Sécurité cloud avancée (Step 16) **+ STRIDE, RGPD, SBOM/signature, drill de restauration (16 septies)** | SonarQube/SonarCloud, NDepend *(payant)*, ArchUnitNET, Snyk, Renovate, Syft + Cosign, **ADR + caractéristiques d'architecture priorisées (Step 18.7)** | 🔄 En cours |
 | 7 | Angular enterprise | Compodoc, extension SonarCloud au TypeScript/Angular | ⏳ À venir |
-| 8 | Microservices **+ messagerie Kafka & patterns distribués (16 quater), contrats d'API & résilience (16 quinquies)** | Structurizr Lite + Mermaid (C4), Swagger/OpenAPI + Redocly par service, Schema Registry, Pact, Polly | ⏳ À venir |
-| 9 | Kubernetes (Step 9 pour de vrai, sur cluster managé) **+ blue-green (16 sexies)** | Open Policy Agent / Gatekeeper | ⏳ À venir |
-| 10 | SRE / plateforme **+ canary automatisé sur métriques & feature flags (16 sexies)** | Grafana + Prometheus, k6, Backstage, **fitness functions performance/coût bloquantes en CI (Step 18.7)** | ⏳ À venir |
+| 8 | Microservices **+ Kafka & patterns distribués (16 quater), contrats d'API & résilience (16 quinquies), traçabilité distribuée (16 octies)** | Structurizr Lite + Mermaid (C4), OpenAPI + Redocly par service, Schema Registry, Pact, Polly, OpenTelemetry | ⏳ À venir |
+| 9 | Kubernetes (Step 9 pour de vrai, sur cluster managé) **+ blue-green (16 sexies) + vérification de signature à l'admission (16 septies)** | Open Policy Agent / Gatekeeper, Cosign verify | ⏳ À venir |
+| 10 | SRE / plateforme **+ canary sur métriques & feature flags (16 sexies), SLI/SLO/error budgets & autoscaling (16 octies)** | Grafana + Prometheus + Tempo, k6, Backstage, **fitness functions performance/coût bloquantes en CI (Step 18.7)** | ⏳ À venir |
 | 11 | **Adoption TOGAF 10.0 & réalignement architecture d'entreprise** (Step 19) | Cycle ADM complet (Preliminary + A à H), tous livrables formels | ⏳ À venir (fin de roadmap) |
 
 ---
@@ -588,6 +589,81 @@ Tous les appels ne deviennent pas asynchrones (voir la grille du Step 16 quater)
 
 ---
 
+## Step 16 septies — Sécurité applicative, données personnelles & chaîne d'approvisionnement *(Sprint 6)*
+
+> **Trou identifié** : le Sprint 6 durcit l'infrastructure (réseau, secrets, TLS, audit) mais ne touche ni à la **sécurité applicative**, ni aux **données personnelles**, ni à la **provenance de ce qu'on livre**. Pour un système destiné à un usage d'entreprise, ces trois-là ne sont pas optionnels.
+
+### Modélisation de menaces (STRIDE)
+
+Le risk storming (Step 18.7) évalue le risque d'architecture ; il ne remplace pas une analyse de menaces orientée attaquant.
+
+- [ ] Passer chaque flux de confiance du système au filtre **STRIDE** (Spoofing, Tampering, Repudiation, Information disclosure, Denial of service, Elevation of privilege) — a minima : navigateur→ALB/App Service, Blazor→API, API→base, CI→cloud, rotation automatique→base
+- [ ] Pour chaque menace retenue : contre-mesure existante, ou décision explicite d'accepter, tracée en ADR
+- [ ] **Menaces déjà identifiables sans attendre l'exercice** : le certificat auto-signé de l'ALB rend une interception active indétectable pour un client ; `Jwt:Key` unique sans `kid` interdit toute rotation sans déconnexion ; le PAT GitHub dans le chemin de déploiement est une élévation de privilège si compromis ; aucun rate limiting côté ALB/App Service (celui de l'application seule ne protège pas d'un déni de service en amont)
+
+### Classification des données & RGPD
+
+Le système stocke des clients et des commandes — donc des données personnelles. Rien dans le roadmap n'en tenait compte jusqu'ici.
+
+- [ ] **Classifier** les données par sensibilité (publique / interne / personnelle / sensible), au niveau table et colonne
+- [ ] **Durée de rétention** définie par catégorie, et purge automatisée — pas seulement documentée
+- [ ] **Droit à l'effacement** : une procédure réelle et testée pour supprimer les données d'une personne, y compris dans les **sauvegardes** et les **logs** (le point dur : un identifiant client dans un log applicatif conservé 30 jours est une donnée personnelle)
+- [ ] **Minimisation des logs** — vérifier qu'aucune donnée personnelle ne part dans CloudWatch/Log Analytics par accident (la convention « aucun secret en log » existe déjà ; l'étendre aux données personnelles)
+- [ ] **Résidence des données** — Azure `westeurope` et AWS `eu-west-1` : cohérent avec l'UE aujourd'hui, à figer comme contrainte explicite plutôt que comme coïncidence de configuration
+- [ ] **Chiffrement au repos** : déjà actif via clés managées ; documenter si une clé gérée par le client (CMK) devient exigible selon la classification retenue
+
+### Chaîne d'approvisionnement logicielle
+
+Trivy, Snyk et Checkov scannent **ce qu'on écrit**. Rien ne prouve **ce qu'on livre** ni **qui l'a produit**.
+
+- [ ] **SBOM** (Syft ou équivalent) généré à chaque build et publié comme artefact — répond à « quelles bibliothèques exactes tournent en production, à cette version d'image précise ? », question impossible à traiter après coup lors d'une CVE critique
+- [ ] **Signature des images** (Cosign / Sigstore, signature keyless via OIDC — cohérent avec l'authentification CI déjà en place)
+- [ ] **Vérification à l'admission** (Sprint 9) : la policy OPA/Gatekeeper refuse toute image non signée par le pipeline. C'est ce qui transforme la signature d'une formalité en contrôle réel
+- [ ] Attestation de provenance (niveau SLSA visé à décider explicitement plutôt que subi)
+
+> Cette section rend aussi actionnable le finding Checkov `CKV_AWS_272` (validation de signature de code sur la Lambda), écarté au Sprint 6 précisément parce que le packaging se fait en local — il devient pertinent dès que le build passe en pipeline signé.
+
+### Restauration testée — pas seulement sauvegarde configurée
+
+- [ ] **Drill de restauration PostgreSQL** sur les deux clouds, dans un environnement isolé, avec **RTO et RPO réellement mesurés** et non estimés
+- [ ] Vérifier la restaurabilité **après** une rotation automatique de mot de passe (Sprint 6) — une sauvegarde restaurée porte l'ancien mot de passe ; la procédure doit le prévoir explicitement
+- [ ] Consigner le résultat en ADR et le rejouer à chaque changement structurant
+
+> **Principe** : une sauvegarde jamais restaurée n'est pas une sauvegarde, c'est une hypothèse. Les backups PostgreSQL sont activés des deux côtés depuis les Sprints 4 et 5 ; aucun n'a jamais été restauré.
+
+---
+
+## Step 16 octies — Observabilité distribuée, SLO & mise à l'échelle *(Sprints 8 et 10)*
+
+### Traçabilité distribuée — Sprint 8, avec les microservices
+
+Le monitoring actuel couvre deux des trois piliers : logs (CloudWatch / Log Analytics) et métriques (alarmes, dashboards). Le troisième — **les traces** — manque, et son absence devient bloquante dès qu'une requête traverse plusieurs services.
+
+- [ ] **OpenTelemetry** dans les applications .NET, avec propagation du contexte de trace (W3C `traceparent`) à travers les appels HTTP **et** les événements Kafka (Step 16 quater) — un événement asynchrone qui perd le contexte de trace casse la chaîne au pire endroit
+- [ ] **Fondation déjà présente à exploiter** : `ArkCloud.API` émet déjà un en-tête `X-Correlation-Id`. Le raccorder au `trace_id` OpenTelemetry plutôt que de maintenir deux identifiants parallèles
+- [ ] Exportation vers un backend unique (Grafana Tempo ou équivalent, cohérent avec le Grafana prévu Step 18.6) plutôt que vers les outils propriétaires de chaque cloud — c'est précisément là que l'observabilité unifiée multi-cloud (Step 16 bis) prend son sens
+- [ ] **Corrélation des trois piliers** : depuis une alarme, atteindre la trace ; depuis la trace, atteindre les logs de la requête concernée
+
+### SLI / SLO / error budgets — Sprint 10
+
+Le Sprint 10 s'intitule « SRE » mais ne définissait aucun objectif de service. Les alarmes actuelles sont des seuils techniques (CPU > 80 %), pas des engagements.
+
+- [ ] Définir les **SLI** qui comptent pour l'utilisateur : disponibilité et latence des parcours critiques (authentification, création de commande) — pas la CPU, qui est une cause possible et non un symptôme ressenti
+- [ ] Fixer les **SLO** correspondants, avec la fenêtre de mesure (ex. 99,5 % sur 30 jours glissants)
+- [ ] En déduire l'**error budget**, et surtout la **politique associée** : ce qui se passe concrètement quand il est consommé (gel des livraisons de fonctionnalités, bascule sur la stabilité). Un error budget sans politique n'est qu'un graphique
+- [ ] **Alerter sur le taux de consommation du budget** (burn rate multi-fenêtres) plutôt que sur des seuils bruts — c'est ce qui supprime les alertes qui réveillent sans rien signifier
+- [ ] Rattachement direct au Step 18.7 : chaque SLO est une caractéristique d'architecture mesurable, donc un candidat naturel à une fitness function
+
+### Politique de mise à l'échelle — Sprint 10
+
+- [ ] **Aucune règle d'autoscaling n'existe aujourd'hui**, ni sur ECS Fargate ni sur App Service. En l'état, sous charge, le système ne s'adapte pas : il dégrade puis tombe
+- [ ] Définir les règles pour chaque service : métrique déclenchante, seuils haut/bas, période de stabilisation (cooldown), bornes minimum/maximum
+- [ ] **Borne maximale obligatoire** — c'est le garde-fou coût, cohérent avec le budget de 7 €/mois déjà en place : un autoscaling sans plafond transforme un pic de trafic (ou une boucle) en facture
+- [ ] **Valider expérimentalement avec k6** (Step 16 ter) : un profil de charge qui déclenche réellement le scale-out, puis le scale-in. Une règle d'autoscaling jamais vue se déclencher est une hypothèse, pas une protection
+- [ ] Vérifier le point dur souvent oublié : le pool de connexions PostgreSQL. Multiplier les instances applicatives multiplie les connexions — le tier Burstable a une limite basse qui sera atteinte avant la limite CPU
+
+---
+
 ## Step 18.7 — Fitness functions & caractéristiques d'architecture *(Sprint 6 → 10, continu)*
 
 > **Deuxième trou identifié en session** : le roadmap outillait la qualité de code (SonarQube), les dépendances (Snyk) et l'architecture logicielle statique (NDepend/ArchUnitNET) — mais rien ne vérifiait automatiquement que les **caractéristiques d'architecture** (performance, disponibilité, coût, sécurité) restent dans leurs limites au fil des livraisons. C'est précisément ce que sont les fitness functions.
@@ -681,6 +757,20 @@ Le principe : évaluer le risque **par zone du système**, de façon délibéré
 **Sécurité**
 - [ ] IAM/RBAC least privilege
 - [ ] Chiffrement au repos (KMS / Key Vault)
+- [ ] Modélisation de menaces STRIDE sur tous les flux de confiance *(Step 16 septies, Sprint 6)*
+- [ ] SBOM généré à chaque build + images signées (Cosign) + vérification à l'admission *(16 septies / Sprint 9)*
+- [ ] Rate limiting en amont (ALB / App Service) — celui de l'application ne protège pas d'un DoS
+
+**Données personnelles & conformité** *(Step 16 septies, Sprint 6)*
+- [ ] Classification des données par sensibilité (table et colonne)
+- [ ] Durées de rétention définies et purge automatisée
+- [ ] Droit à l'effacement testé — y compris dans les sauvegardes et les logs
+- [ ] Aucune donnée personnelle dans les logs (vérifié, pas supposé)
+- [ ] Résidence des données figée comme contrainte explicite (UE)
+
+**Continuité**
+- [ ] Drill de restauration PostgreSQL réel, RTO/RPO mesurés, sur les deux clouds *(16 septies)*
+- [ ] Restauration validée après rotation automatique de mot de passe
 - [x] TLS partout — Azure App Service a HTTPS par défaut (certificat Microsoft) ; **AWS ALB en HTTPS depuis Sprint 6** avec un certificat auto-signé (pas de domaine réel disponible pour un certificat ACM validé par DNS) — navigateur affiche un avertissement de confiance, mais le trafic est chiffré ; HTTP redirige désormais vers HTTPS au lieu de servir en clair. À remplacer par un certificat DNS-validé dès qu'un domaine existe (voir README §9 pour le détail complet)
 - [x] Rotation des secrets — **mots de passe Postgres : rotation automatique tous les 90 jours sur les deux clouds** (Sprint 6, `modules/azure/secret-rotation` via Automation Runbook + schedule, `modules/aws/secret-rotation` via Secrets Manager + Lambda custom). `Jwt:Key` et `GHCR_PAT` restent manuels par décision explicite (rotation JWT = déconnexion de tous les utilisateurs sans support multi-clés ; PAT GitHub = aucune API cloud pour l'automatiser), couverts par les rappels d'échéance automatisés (`.github/workflows/secret-expiry-check.yml` + `.github/secrets-inventory.json`). Détail complet README §10
 - [x] Audit logging activé
@@ -702,6 +792,17 @@ Le principe : évaluer le risque **par zone du système**, de façon délibéré
 - [ ] Backstage — catalogue des services/APIs/ownership à jour
 - [ ] Grafana + Prometheus — dashboards de plateforme, alerting configuré
 - [ ] k6 — scénarios de tests de charge sur les endpoints critiques
+
+**Observabilité, fiabilité & mise à l'échelle** *(Step 16 octies, Sprints 8 et 10)*
+- [ ] Traçabilité distribuée OpenTelemetry, contexte propagé HTTP **et** Kafka
+- [ ] `X-Correlation-Id` existant raccordé au `trace_id` plutôt que maintenu en parallèle
+- [ ] Corrélation opérationnelle des trois piliers : alarme → trace → logs de la requête
+- [ ] SLI/SLO définis sur les parcours critiques (auth, création de commande)
+- [ ] Error budget **avec sa politique** — ce qui se passe concrètement quand il est consommé
+- [ ] Alerting sur burn rate multi-fenêtres, pas sur seuils bruts
+- [ ] Règles d'autoscaling définies (ECS + App Service) avec **borne maximale** comme garde-fou coût
+- [ ] Scale-out **et** scale-in observés réellement sous k6
+- [ ] Limite du pool de connexions PostgreSQL vérifiée avant la limite CPU
 
 **Multi-cloud avancé** *(Step 16 bis, Sprints 6/9/10)*
 - [ ] VPN/interconnect privé entre VPC AWS et VNet Azure
