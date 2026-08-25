@@ -457,6 +457,8 @@ Développeur → Git Push → Restore → Build → Tests unitaires
 
 > **NSG flow logs — fait (Sprint 6), mais pas des NSG flow logs au final** : `modules/azure/flow-logs` — Network Watcher (référencé via data source, celui auto-créé par Azure existe déjà depuis la création du VNet), storage account dédié, rétention 30 jours. Bug réel découvert à l'apply : Azure a retiré la création de **nouveaux** NSG flow logs le 30/06/2025 (retraite complète le 30/09/2027) — confirmé contre la doc officielle du provider AzureRM et le guide de migration Microsoft. Remplacé par les **Virtual Network Flow Logs** : même ressource Terraform (`azurerm_network_watcher_flow_log`), `target_resource_id` pointé sur le VNet entier plutôt que `network_security_group_id` sur chaque NSG — un seul flow log couvre les 4 sous-réseaux (api/web/database/private-endpoint) au lieu d'un par NSG. Traffic Analytics désactivé par défaut (`azure_enable_traffic_analytics = false`) — facturé au Go traité en plus des flow logs eux-mêmes, activable plus tard sans changement de code si un vrai besoin de requêtage apparaît.
 
+> **GuardDuty (AWS) + Defender for Cloud (Azure) — fait (Sprint 6)** : `modules/aws/guardduty` (détecteur + règle EventBridge filtrée >= sévérité Medium vers le topic SNS d'alertes existant, `input_transformer` pour un message lisible) et `modules/azure/defender` (plans Defender activés sélectivement + export continu vers le même workspace Log Analytics que le reste de l'observabilité). Decision coût, vérifiée contre la page de pricing Azure : Defender for App Service (~14,60 $/instance/mois × 2 App Services ≈ 29 $/mois) et Defender for Databases dépasseraient à eux seuls le plafond cost-guard de 7 €/mois — désactivés par défaut (`azure_enable_defender_app_service`/`azure_enable_defender_databases`, à activer pour staging/prod). Seul Defender for Key Vault reste actif par défaut (facturé à la transaction, négligeable au volume actuel) — le pendant Azure le plus direct du signal IAM/credentials que GuardDuty donne côté AWS. Différence structurelle documentée dans le module : contrairement à tout le reste de cette infra, les plans Defender sont scopés à la subscription entière, pas au resource group.
+
 ---
 
 ## Step 16 bis — Exploiter le plein potentiel du multi-cloud *(post-Sprint 5, distribué Sprints 6/9/10)*
@@ -686,7 +688,7 @@ Une fitness function est un **test automatisé de la caractéristique**, exécut
 | **Sécurité** | Checkov, Trivy, Snyk (bloquants en CI) | Fitness function « aucun secret en clair » et « TLS partout » vérifiée sur l'infra déployée, pas seulement sur le code |
 | **Performance** | — | Seuil k6 en CI (Sprint 10) : la PR échoue si p95 dépasse le seuil défini, plutôt qu'un test de charge dont on regarde le résultat à la main |
 | **Disponibilité / résilience** | — | Chaos Mesh (Sprint 9) exécuté en pipeline avec assertion : le système reste dans son SLO pendant l'expérience, sinon échec |
-| **Coût** | Budget Azure 7 €/mois (garde-fou runtime, Sprint 6) | Fitness function CI : `infracost` sur le plan Terraform, PR bloquée si le delta dépasse un seuil — détecte la dérive **avant** l'apply, pas après la facture |
+| **Coût** | Budget Azure 7 €/mois (garde-fou runtime, Sprint 6) ; `infracost` sur le plan Terraform (job `infracost` dans `ArkCloudInfra/.github/workflows/terraform-ci.yml`, Sprint 6) — PR bloquée si le delta dépasse 20 $/mois, détecte la dérive **avant** l'apply, pas après la facture. Pas encore vérifié par un run réel (secret `INFRACOST_API_KEY` pas encore posé), voir README §12 | — |
 | **Observabilité** | Alarmes CloudWatch / Application Insights | Vérification automatisée qu'une alarme se déclenche réellement pendant un test de charge (déjà prévu Step 16 ter, à formaliser en fitness function) |
 
 ### Architecture Decision Records (ADR) — le support de tout le reste
@@ -755,7 +757,7 @@ Le principe : évaluer le risque **par zone du système**, de façon délibéré
 - [ ] Évaluation Jenkins *(Sprint 9)*
 
 **Sécurité**
-- [ ] IAM/RBAC least privilege
+- [~] IAM/RBAC least privilege — audit complet fait (Sprint 6, README ArkCloudInfra §11) : 3 rôles Azure `Contributor` trop larges remplacés par des rôles personnalisés vérifiés contre la doc RBAC officielle. Reste ouvert, action manuelle requise : le rôle CI Azure AD (`Contributor` souscription-wide au lieu du seul resource group) et le rôle CI AWS (`arkcloudinfra-ci`, jamais documenté dans le repo) — commandes de correction/inventaire données dans le README, pas encore exécutées.
 - [ ] Chiffrement au repos (KMS / Key Vault)
 - [ ] Modélisation de menaces STRIDE sur tous les flux de confiance *(Step 16 septies, Sprint 6)*
 - [ ] SBOM généré à chaque build + images signées (Cosign) + vérification à l'admission *(16 septies / Sprint 9)*
@@ -783,7 +785,7 @@ Le principe : évaluer le risque **par zone du système**, de façon délibéré
 **Qualité, architecture & gouvernance** *(Step 18, Sprints 6-10)*
 - [ ] Quality gate SonarQube/SonarCloud bloquant en CI (bugs, vulnerabilities, code smells, couverture)
 - [ ] NDepend — 0 violation de règle de dépendance critique (ex. Domain ne référence jamais Infrastructure)
-- [ ] ArchUnitNET — tests d'architecture dans la suite de tests, exécutés en CI
+- [x] ArchUnitNET — tests d'architecture dans la suite de tests, exécutés en CI (`backend/tests/ArkCloud.Tests.Architecture`, job `arkcloud-backend-ci.yml` — sens de dépendance Domain/Application/Infrastructure/API, indépendance vis-à-vis d'EF Core/ASP.NET Core, placement des Controllers/Repositories)
 - [ ] Snyk — 0 vulnérabilité critique/haute non corrigée (dépendances, images Docker, IaC)
 - [ ] Renovate configuré (PRs automatiques de mise à jour de dépendances)
 - [ ] Documentation d'architecture C4 à jour (Structurizr/Mermaid)

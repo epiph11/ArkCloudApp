@@ -45,17 +45,28 @@ jobs:
           dotnet restore backend/ArkCloud.API/ArkCloud.API.csproj
           dotnet restore backend/tests/ArkCloud.Tests.Unit/ArkCloud.Tests.Unit.csproj
           dotnet restore backend/tests/ArkCloud.Tests.Integration/ArkCloud.Tests.Integration.csproj
+          dotnet restore backend/tests/ArkCloud.Tests.Architecture/ArkCloud.Tests.Architecture.csproj
 
       - name: Build
         run: |
           dotnet build backend/ArkCloud.API/ArkCloud.API.csproj --no-restore --configuration Release
           dotnet build backend/tests/ArkCloud.Tests.Unit/ArkCloud.Tests.Unit.csproj --no-restore --configuration Release
           dotnet build backend/tests/ArkCloud.Tests.Integration/ArkCloud.Tests.Integration.csproj --no-restore --configuration Release
+          dotnet build backend/tests/ArkCloud.Tests.Architecture/ArkCloud.Tests.Architecture.csproj --no-restore --configuration Release
 
       - name: Test
         run: |
           dotnet test backend/tests/ArkCloud.Tests.Unit/ArkCloud.Tests.Unit.csproj --no-build --configuration Release --logger trx --results-directory ./TestResults
           dotnet test backend/tests/ArkCloud.Tests.Integration/ArkCloud.Tests.Integration.csproj --no-build --configuration Release --logger trx --results-directory ./TestResults
+
+      # Sprint 6 fitness functions — fails the build if a commit breaks the Clean Architecture
+      # dependency direction (Domain/Application/Infrastructure/API) or leaks EF Core/ASP.NET
+      # Core into Domain/Application. Separate step (not folded into the Test step above) so a
+      # failure here is immediately legible as "architecture rule broken", not lost among unit/
+      # integration test output. See backend/tests/ArkCloud.Tests.Architecture/ArchitectureTests.cs.
+      - name: Fitness functions (architecture rules)
+        run: |
+          dotnet test backend/tests/ArkCloud.Tests.Architecture/ArkCloud.Tests.Architecture.csproj --no-build --configuration Release --logger trx --results-directory ./TestResults
 
       - name: Upload test results
         if: always()
