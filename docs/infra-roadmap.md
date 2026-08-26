@@ -700,6 +700,16 @@ Une fitness function est un **test automatisé de la caractéristique**, exécut
 - [ ] Toute décision du Sprint 8 (granularité, saga, Kafka) documentée en ADR **au moment de la décision**, pas reconstituée après — process en place (ADR-0007, 0008 déjà écrites au moment de la décision plutôt que reconstituées), à appliquer quand le Sprint 8 démarrera
 - [ ] Les ADR deviennent l'entrée de l'Architecture Repository TOGAF au Sprint 11 (Step 19) plutôt qu'un travail parallèle
 
+### Stratégie de branches et de versionning — Sprint 6
+
+> **Quatrième trou identifié en session** : aucun système de versionning n'a jamais existé — pas de tag Git, pas de `CHANGELOG.md`, pas de convention de commit, et `main` abandonnée depuis le scaffold initial pendant que tout le travail réel vivait sur `develop`.
+
+- [x] Modèle de branches trunk-based adopté (`develop` = intégration, `main` = protégée/déployable) — voir ADR-0009
+- [x] SemVer démarré à `v0.1.0` (pas `v1.0.0` — le projet n'est pas encore production-ready) et `CHANGELOG.md` créé à la racine
+- [x] Convention Conventional Commits adoptée à partir de maintenant (historique existant non réécrit)
+- [ ] Protection de branche sur `main` (PR + CI verte obligatoires) — à activer dans les paramètres GitHub (action utilisateur)
+- [ ] Merge `develop` → `main` + tag `v0.1.0` — à faire (commandes données par l'assistant, à exécuter en local)
+
 ### Analyse de risque structurée (risk storming) — Sprint 6, puis à chaque changement structurant
 
 > **Cinquième trou** : les risques de ce projet sont réels et connus au coup par coup (mots de passe exposés dans le chat, certificat auto-signé, deux dossiers Terraform divergents, PAT qui expire…), mais toujours découverts **au moment où ils se manifestent**. Aucune démarche ne les identifie à froid, avant l'incident.

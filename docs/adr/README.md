@@ -15,6 +15,7 @@ Numérotation séquentielle, jamais réutilisée — une décision remplacée ob
 | [0005](0005-architecture-cible-primaire-dr.md) | Architecture cible Azure/AWS — primaire + DR | Acceptée (migration non commencée) |
 | [0007](0007-pat-github-pipeline-risque-accepte.md) | `GHCR_PAT` — risque accepté | Acceptée |
 | [0008](0008-rate-limiting-perimetre-applicatif-seul.md) | Rate limiting applicatif seul, rien en infra | Acceptée (temporaire) |
+| [0009](0009-strategie-branches-et-versionning.md) | Stratégie de branches et de versionning (trunk-based, SemVer 0.x, Conventional Commits) | Acceptée |
 
 *(0006 réservée — voir `docs/threat-model-stride.md`, la rotation `Jwt:Key` est couverte par l'ADR-0004 plutôt que dupliquée dans une ADR séparée ; le numéro reste sauté plutôt que réattribué, pour ne jamais faire porter à un même numéro deux décisions différentes selon quand on lit ce repo.)*
 
