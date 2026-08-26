@@ -26,6 +26,10 @@ permissions:
 
 env:
   IMAGE_NAME: ghcr.io/${{ github.repository_owner }}/arkcloud-api
+  # NDepend GitHub Action trial (Sprint 6, backlog item). Same "no-op until the secret exists"
+  # pattern as the infracost job in ArkCloudInfra — every step guarded by this is skipped
+  # entirely, no failure, until NDependLicense is actually set (see docs/infra-roadmap.md §18.2).
+  NDEPEND_LICENSE: ${{ secrets.NDependLicense }}
 
 jobs:
   build-test:
@@ -74,6 +78,23 @@ jobs:
         with:
           name: backend-test-results
           path: ./TestResults
+
+      # NDepend trial (28-day GitHub Action trial, Sprint 6 backlog — see docs/infra-roadmap.md
+      # §18.2). Complements ArchUnitNET rather than replacing it: ArchUnitNET is the continuous
+      # pass/fail gate on the exact rules already written; NDepend is the exploratory report
+      # (dependency graph, 100+ metrics, technical debt estimate) NDepend does better, per
+      # ADR-0007-style "diagnostic vs enforcement" split already documented for these two tools.
+      #
+      # Analyzes ArkCloud.sln, which also references the Blazor frontend project — not built in
+      # this job (that happens in arkcloud-frontend-ci.yml). Not yet verified by a real run
+      # whether NDepend tolerates that missing assembly gracefully or needs the `solution`/
+      # `customconfig` parameter narrowed — first real trial run will tell.
+      - name: NDepend (trial)
+        if: env.NDEPEND_LICENSE != ''
+        uses: ndepend/ndepend-action@v2
+        with:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          license: ${{ secrets.NDependLicense }}
 
       - name: Publish API
         run: dotnet publish backend/ArkCloud.API/ArkCloud.API.csproj -c Release -o ./publish

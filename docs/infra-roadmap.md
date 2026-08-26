@@ -799,7 +799,7 @@ Le principe : évaluer le risque **par zone du système**, de façon délibéré
 
 **Qualité, architecture & gouvernance** *(Step 18, Sprints 6-10)*
 - [ ] Quality gate SonarQube/SonarCloud bloquant en CI (bugs, vulnerabilities, code smells, couverture)
-- [ ] NDepend — 0 violation de règle de dépendance critique (ex. Domain ne référence jamais Infrastructure)
+- [ ] NDepend — essai gratuit en cours (28j, GitHub Action, `arkcloud-backend-ci.yml`) — step ajouté, no-op tant que le secret `NDependLicense` n'est pas posé. Aucun engagement financier : pas de carte bancaire demandée à l'inscription (vérifié sur `ndepend.com/download` et `/activation_githubaction`)
 - [x] ArchUnitNET — tests d'architecture dans la suite de tests, exécutés en CI (`backend/tests/ArkCloud.Tests.Architecture`, job `arkcloud-backend-ci.yml` — sens de dépendance Domain/Application/Infrastructure/API, indépendance vis-à-vis d'EF Core/ASP.NET Core, placement des Controllers/Repositories)
 - [ ] Snyk — 0 vulnérabilité critique/haute non corrigée (dépendances, images Docker, IaC)
 - [ ] Renovate configuré (PRs automatiques de mise à jour de dépendances)
