@@ -707,8 +707,9 @@ Une fitness function est un **test automatisé de la caractéristique**, exécut
 - [x] Modèle de branches trunk-based adopté (`develop` = intégration, `main` = protégée/déployable) — voir ADR-0009
 - [x] SemVer démarré à `v0.1.0` (pas `v1.0.0` — le projet n'est pas encore production-ready) et `CHANGELOG.md` créé à la racine
 - [x] Convention Conventional Commits adoptée à partir de maintenant (historique existant non réécrit)
-- [ ] Protection de branche sur `main` (PR + CI verte obligatoires) — à activer dans les paramètres GitHub (action utilisateur)
-- [ ] Merge `develop` → `main` + tag `v0.1.0` — à faire (commandes données par l'assistant, à exécuter en local)
+- [x] Protection de branche sur `main` (PR + `build-test` requis) — activée. Découverte au passage : le premier `git push origin main` direct a été rejeté silencieusement par cette même règle (déjà active avant le push), corrigé en passant par une vraie Pull Request `develop` → `main`
+- [x] Merge `develop` → `main` + tag `v0.1.0` — fait, via PR (pas de push direct, bloqué par la protection de branche)
+- [x] **Incident réel découvert en cours de route** : OneDrive (Files On-Demand) a déshydraté des fichiers du dépôt local en pleine session (`.github/workflows/*.yml`, du code source backend) — `git status` les montrait "deleted" côté working tree alors que l'historique Git (`HEAD`/`develop`/`origin/develop`/tag `v0.1.0` tous alignés) était intact. Récupéré avec `git restore .` (le contenu vient de l'objet Git, pas de perte réelle). Recommandé : exclure le dossier `ArkCloud` de la déshydratation OneDrive ("Toujours conserver sur cet appareil") pour éviter la récidive — risque déjà documenté dans le README du scaffold initial (corruption `.git/config` par le même mécanisme)
 
 ### Analyse de risque structurée (risk storming) — Sprint 6, puis à chaque changement structurant
 
