@@ -39,7 +39,10 @@ public class AuthService
     {
         if (await _userRepository.EmailExistsAsync(request.Email, cancellationToken))
         {
-            _logger.LogWarning("Registration attempt with an email that is already in use: {Email}.", request.Email);
+            // No {Email} here: at this point there is no user object to attach an id to,
+            // and the email itself is personal data — the message is informative enough
+            // without it (see docs/rgpd-classification-donnees.md, minimisation des logs).
+            _logger.LogWarning("Registration attempt with an email that is already in use.");
             throw new AuthenticationException("An account with this email already exists.");
         }
 
@@ -58,7 +61,7 @@ public class AuthService
 
         await _unitOfWork.SaveChangesAsync(cancellationToken);
 
-        _logger.LogInformation("User {Email} registered.", user.Email);
+        _logger.LogInformation("User {UserId} registered.", user.Id);
 
         return response;
     }
@@ -71,19 +74,20 @@ public class AuthService
         // so the API never reveals which emails are registered.
         if (user is null)
         {
-            _logger.LogWarning("Failed login attempt for unknown email {Email}.", request.Email);
+            // Same reasoning as the registration case: no user id exists to log instead.
+            _logger.LogWarning("Failed login attempt for an unknown email.");
             throw new AuthenticationException("Invalid email or password.");
         }
 
         if (user.IsLockedOut)
         {
-            _logger.LogWarning("Login blocked for temporarily locked account {Email}.", user.Email);
+            _logger.LogWarning("Login blocked for temporarily locked account {UserId}.", user.Id);
             throw new AuthenticationException("This account is temporarily locked due to too many failed attempts. Try again later.");
         }
 
         if (!user.IsActive)
         {
-            _logger.LogWarning("Login attempt for deactivated account {Email}.", user.Email);
+            _logger.LogWarning("Login attempt for deactivated account {UserId}.", user.Id);
             throw new AuthenticationException("This account has been deactivated.");
         }
 
@@ -93,8 +97,8 @@ public class AuthService
             await _unitOfWork.SaveChangesAsync(cancellationToken);
 
             _logger.LogWarning(
-                "User {Email} failed login (attempt {Attempts}/{MaxAttempts}).",
-                user.Email, user.FailedLoginAttempts, MaxFailedAttempts);
+                "User {UserId} failed login (attempt {Attempts}/{MaxAttempts}).",
+                user.Id, user.FailedLoginAttempts, MaxFailedAttempts);
 
             throw new AuthenticationException("Invalid email or password.");
         }
@@ -106,7 +110,7 @@ public class AuthService
 
         await _unitOfWork.SaveChangesAsync(cancellationToken);
 
-        _logger.LogInformation("User {Email} logged in.", user.Email);
+        _logger.LogInformation("User {UserId} logged in.", user.Id);
 
         return response;
     }
@@ -129,7 +133,7 @@ public class AuthService
 
         await _unitOfWork.SaveChangesAsync(cancellationToken);
 
-        _logger.LogInformation("Access token refreshed for {Email}.", user.Email);
+        _logger.LogInformation("Access token refreshed for {UserId}.", user.Id);
 
         return response;
     }
@@ -143,7 +147,7 @@ public class AuthService
         user.RevokeRefreshToken(refreshToken);
         await _unitOfWork.SaveChangesAsync(cancellationToken);
 
-        _logger.LogInformation("User {Email} logged out.", user.Email);
+        _logger.LogInformation("User {UserId} logged out.", user.Id);
     }
 
     private async Task<AuthResponse> BuildAuthResponseAsync(User user, IReadOnlyCollection<string> roles, CancellationToken cancellationToken)

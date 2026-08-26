@@ -607,12 +607,12 @@ Le risk storming (Step 18.7) évalue le risque d'architecture ; il ne remplace p
 
 Le système stocke des clients et des commandes — donc des données personnelles. Rien dans le roadmap n'en tenait compte jusqu'ici.
 
-- [ ] **Classifier** les données par sensibilité (publique / interne / personnelle / sensible), au niveau table et colonne
-- [ ] **Durée de rétention** définie par catégorie, et purge automatisée — pas seulement documentée
-- [ ] **Droit à l'effacement** : une procédure réelle et testée pour supprimer les données d'une personne, y compris dans les **sauvegardes** et les **logs** (le point dur : un identifiant client dans un log applicatif conservé 30 jours est une donnée personnelle)
-- [ ] **Minimisation des logs** — vérifier qu'aucune donnée personnelle ne part dans CloudWatch/Log Analytics par accident (la convention « aucun secret en log » existe déjà ; l'étendre aux données personnelles)
-- [ ] **Résidence des données** — Azure `westeurope` et AWS `eu-west-1` : cohérent avec l'UE aujourd'hui, à figer comme contrainte explicite plutôt que comme coïncidence de configuration
-- [ ] **Chiffrement au repos** : déjà actif via clés managées ; documenter si une clé gérée par le client (CMK) devient exigible selon la classification retenue
+- [x] **Classifier** les données par sensibilité — fait (Sprint 6), voir `docs/rgpd-classification-donnees.md` §1 : `Customer` et `User` (personnelle), `Order` (liée indirectement via `CustomerId`, sans contrainte FK configurée)
+- [ ] **Durée de rétention** définie par catégorie, et purge automatisée — état actuel documenté (§2 : backups 1j AWS/7j Azure, logs 30j des deux côtés), mais aucune purge par catégorie métier (au-delà de l'expiration technique) n'existe — reste à faire
+- [ ] **Droit à l'effacement** : chemin réel existe (`CustomerAppService.DeleteAsync`, hard delete), mais jamais testé de bout en bout et deux limites trouvées (commandes orphelines faute de FK, survie en backup jusqu'à 7j) — voir §3, pas encore une procédure formelle
+- [x] **Minimisation des logs** — fait (Sprint 6) : `AuthService.cs` loguait l'email en clair à 8 endroits (seule fuite trouvée après recherche exhaustive des appels `_logger.Log*` du backend), corrigé pour utiliser `UserId` à la place, voir `docs/rgpd-classification-donnees.md` §4
+- [x] **Résidence des données** — confirmé (Sprint 6) : `westeurope` + `eu-west-1`, géo-réplication désactivée par défaut des deux côtés, voir §5
+- [x] **Chiffrement au repos** — confirmé actif des deux côtés (clé managée, pas de CMK) ; pas de déclencheur identifié pour une CMK à ce niveau de classification, voir §6
 
 ### Chaîne d'approvisionnement logicielle
 
