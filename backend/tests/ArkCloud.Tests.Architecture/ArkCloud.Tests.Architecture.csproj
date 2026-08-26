@@ -1,0 +1,38 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <LangVersion>latest</LangVersion>
+    <IsPackable>false</IsPackable>
+    <IsTestProject>true</IsTestProject>
+    <RootNamespace>ArkCloud.Tests.Architecture</RootNamespace>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.NET.Test.Sdk" Version="18.7.0" />
+    <PackageReference Include="xunit" Version="2.9.3" />
+    <PackageReference Include="xunit.runner.visualstudio" Version="3.1.5">
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+      <PrivateAssets>all</PrivateAssets>
+    </PackageReference>
+    <!-- Sprint 6 fitness functions — enforces the Clean Architecture dependency direction
+         (Domain/Application/Infrastructure/API) as an automated test, not just a convention
+         nobody re-checks after the fact. TngTech.ArchUnitNET.xUnit pulls in the core
+         TngTech.ArchUnitNET package transitively; both target netstandard2.0, which net10.0
+         projects consume without issue. -->
+    <PackageReference Include="TngTech.ArchUnitNET.xUnit" Version="0.13.1" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- All four layers are referenced on purpose, even though this is a "test" project that
+         asserts they DON'T depend on each other in the wrong direction — ArchUnitNET needs the
+         compiled assemblies loaded to inspect their actual IL-level dependencies. -->
+    <ProjectReference Include="..\..\ArkCloud.Domain\ArkCloud.Domain.csproj" />
+    <ProjectReference Include="..\..\ArkCloud.Application\ArkCloud.Application.csproj" />
+    <ProjectReference Include="..\..\ArkCloud.Infrastructure\ArkCloud.Infrastructure.csproj" />
+    <ProjectReference Include="..\..\ArkCloud.API\ArkCloud.API.csproj" />
+  </ItemGroup>
+
+</Project>

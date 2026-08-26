@@ -1,0 +1,110 @@
+@page "/register"
+@layout MainLayout
+@inject JwtAuthenticationStateProvider AuthStateProvider
+@inject NavigationManager Navigation
+
+<PageTitle>Create account</PageTitle>
+
+<h1>Create account</h1>
+
+<EditForm Model="_model" OnValidSubmit="HandleRegisterAsync">
+    <DataAnnotationsValidator />
+    <ValidationSummary />
+
+    <div class="mb-3">
+        <label>First name</label>
+        <InputText class="form-control" @bind-Value="_model.FirstName" />
+    </div>
+
+    <div class="mb-3">
+        <label>Last name</label>
+        <InputText class="form-control" @bind-Value="_model.LastName" />
+    </div>
+
+    <div class="mb-3">
+        <label>Email</label>
+        <InputText class="form-control" @bind-Value="_model.Email" />
+    </div>
+
+    <div class="mb-3">
+        <label>Password</label>
+        <InputText class="form-control" type="password" @bind-Value="_model.Password" />
+    </div>
+
+    <div class="mb-3">
+        <label>Confirm password</label>
+        <InputText class="form-control" type="password" @bind-Value="_model.ConfirmPassword" />
+    </div>
+
+    @if (!string.IsNullOrWhiteSpace(_errorMessage))
+    {
+        <div class="alert alert-danger">@_errorMessage</div>
+    }
+
+    <button type="submit" class="btn btn-primary" disabled="@_isBusy">Create account</button>
+</EditForm>
+
+@code {
+    private readonly RegisterModel _model = new();
+    private bool _isBusy;
+    private string? _errorMessage;
+
+    protected override async Task OnInitializedAsync()
+    {
+        var state = await AuthStateProvider.GetAuthenticationStateAsync();
+        if (state.User.Identity?.IsAuthenticated == true)
+        {
+            Navigation.NavigateTo("/", forceLoad: true);
+        }
+    }
+
+    private async Task HandleRegisterAsync()
+    {
+        _isBusy = true;
+        _errorMessage = null;
+
+        try
+        {
+            await AuthStateProvider.RegisterAsync(new RegisterRequest
+            {
+                Email = _model.Email,
+                Password = _model.Password,
+                FirstName = _model.FirstName,
+                LastName = _model.LastName
+            });
+
+            Navigation.NavigateTo("/", forceLoad: true);
+        }
+        catch (Exception ex)
+        {
+            _errorMessage = ex.Message;
+        }
+        finally
+        {
+            _isBusy = false;
+        }
+    }
+
+    private class RegisterModel
+    {
+        [System.ComponentModel.DataAnnotations.Required]
+        public string FirstName { get; set; } = string.Empty;
+
+        [System.ComponentModel.DataAnnotations.Required]
+        public string LastName { get; set; } = string.Empty;
+
+        [System.ComponentModel.DataAnnotations.Required]
+        [System.ComponentModel.DataAnnotations.EmailAddress]
+        public string Email { get; set; } = string.Empty;
+
+        // Mirrors the server-side RegisterRequestValidator (min 8 chars + upper/lower/digit/special).
+        // Client-side DataAnnotations only checks length; the API is the source of truth.
+        [System.ComponentModel.DataAnnotations.Required]
+        [System.ComponentModel.DataAnnotations.MinLength(8)]
+        public string Password { get; set; } = string.Empty;
+
+        [System.ComponentModel.DataAnnotations.Required]
+        [System.ComponentModel.DataAnnotations.Compare(nameof(Password))]
+        public string ConfirmPassword { get; set; } = string.Empty;
+    }
+}

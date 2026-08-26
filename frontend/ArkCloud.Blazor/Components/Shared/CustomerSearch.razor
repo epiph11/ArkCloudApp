@@ -1,0 +1,112 @@
+@inject CustomersApiClient CustomersApi
+
+<div>
+    @if (_selected is not null)
+    {
+        <p>
+            Customer: <strong>@_selected.FirstName @_selected.LastName</strong> (@_selected.Email)
+            <button type="button" class="btn btn-link" @onclick="Clear">Change</button>
+        </p>
+    }
+    else
+    {
+        <input class="form-control" placeholder="Search customers by name or email..."
+               @bind="_search" @bind:event="oninput" @onkeyup="OnSearchKeyUp" />
+
+        <ErrorBanner Message="@_searchError" />
+
+        @if (_isSearching)
+        {
+            <LoadingSpinner Text="Searching..." />
+        }
+        else if (_results is { Count: > 0 })
+        {
+            <ul class="search-results">
+                @foreach (var customer in _results)
+                {
+                    <li @onclick="() => SelectAsync(customer)">
+                        @customer.FirstName @customer.LastName — @customer.Email
+                    </li>
+                }
+            </ul>
+        }
+        else if (_hasSearched)
+        {
+            <p>No matching customers.</p>
+        }
+    }
+</div>
+
+@code {
+    /// <summary>Fired once the caller picks a customer from the results list.</summary>
+    [Parameter]
+    public EventCallback<ArkCloud.Application.DTOs.CustomerResponse> OnSelected { get; set; }
+
+    private string _search = string.Empty;
+    private List<ArkCloud.Application.DTOs.CustomerResponse>? _results;
+    private ArkCloud.Application.DTOs.CustomerResponse? _selected;
+    private bool _isSearching;
+    private bool _hasSearched;
+    private string? _searchError;
+    private CancellationTokenSource? _debounce;
+
+    private async Task OnSearchKeyUp(Microsoft.AspNetCore.Components.Web.KeyboardEventArgs e)
+    {
+        _debounce?.Cancel();
+
+        if (string.IsNullOrWhiteSpace(_search))
+        {
+            _results = null;
+            _hasSearched = false;
+            _searchError = null;
+            return;
+        }
+
+        _debounce = new CancellationTokenSource();
+        var token = _debounce.Token;
+
+        try
+        {
+            await Task.Delay(300, token);
+        }
+        catch (TaskCanceledException)
+        {
+            return;
+        }
+
+        _isSearching = true;
+        _searchError = null;
+        try
+        {
+            var page = await CustomersApi.GetPagedAsync(search: _search, page: 1, pageSize: 10, cancellationToken: token);
+            _results = page.Items;
+            _hasSearched = true;
+        }
+        catch (OperationCanceledException)
+        {
+            // A newer keystroke superseded this search — ignore.
+        }
+        catch (HttpRequestException ex)
+        {
+            _searchError = $"Could not reach the API: {ex.Message}";
+        }
+        finally
+        {
+            _isSearching = false;
+        }
+    }
+
+    private async Task SelectAsync(ArkCloud.Application.DTOs.CustomerResponse customer)
+    {
+        _selected = customer;
+        _results = null;
+        _search = string.Empty;
+        await OnSelected.InvokeAsync(customer);
+    }
+
+    private void Clear()
+    {
+        _selected = null;
+        _hasSearched = false;
+    }
+}

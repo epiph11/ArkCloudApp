@@ -1,0 +1,24 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <base href="/" />
+    <link rel="stylesheet" href="app.css" />
+    <HeadOutlet />
+</head>
+<body>
+    <!--
+        Prerendering is disabled: the JWT lives in ProtectedSessionStorage, which needs JS
+        interop that isn't available during prerendering (TokenStorageService treats that as
+        "anonymous" — see its remarks). With prerendering on, a protected page briefly looks
+        anonymous on every full page load, RedirectToLogin fires, the interactive circuit then
+        sees the real (authenticated) state and bounces back with forceLoad — an infinite
+        Dashboard <-> Login redirect loop, and stray full reloads mid-form-submit are also what
+        triggers the "@formname" form-routing error. Skipping prerendering removes the whole
+        window in which the auth state can disagree with itself.
+    -->
+    <Routes @rendermode="@(new InteractiveServerRenderMode(prerender: false))" />
+    <script src="_framework/blazor.web.js"></script>
+</body>
+</html>

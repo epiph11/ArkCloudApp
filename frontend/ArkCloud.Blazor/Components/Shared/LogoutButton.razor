@@ -1,0 +1,12 @@
+@inject JwtAuthenticationStateProvider AuthStateProvider
+@inject NavigationManager Navigation
+
+<button class="btn btn-link" @onclick="LogoutAsync">Logout</button>
+
+@code {
+    private async Task LogoutAsync()
+    {
+        await AuthStateProvider.LogoutAsync();
+        Navigation.NavigateTo("login", forceLoad: true);
+    }
+}

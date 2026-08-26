@@ -19,16 +19,34 @@ services:
   api:
     build:
       context: ../..
-      dockerfile: src/ArkCloud.API/Dockerfile
+      dockerfile: deploy/docker/Dockerfile.api
     container_name: arkcloud-api
     environment:
       ASPNETCORE_ENVIRONMENT: Development
       ConnectionStrings__DefaultConnection: Host=postgres;Port=5432;Database=arkcloud;Username=arkcloud;Password=arkcloud
+      # Required, no default on purpose — see deploy/docker/.env.example. This is the same
+      # Jwt:Key Program.cs refuses to start without; containers can't reach the host's
+      # `dotnet user-secrets` store, so it comes from a gitignored deploy/docker/.env file
+      # (Compose loads it automatically) instead.
+      Jwt__Key: ${JWT_KEY:?Set JWT_KEY in deploy/docker/.env — copy .env.example and fill in a random 64+ char value}
     ports:
       - "8080:8080"
     depends_on:
       postgres:
         condition: service_healthy
+
+  blazor:
+    build:
+      context: ../..
+      dockerfile: deploy/docker/Dockerfile.blazor
+    container_name: arkcloud-blazor
+    environment:
+      ASPNETCORE_ENVIRONMENT: Development
+      Api__BaseUrl: http://api:8080/
+    ports:
+      - "8081:8081"
+    depends_on:
+      - api
 
 volumes:
   arkcloud_postgres_data:

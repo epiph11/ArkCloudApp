@@ -1,0 +1,138 @@
+@inject ProductsApiClient ProductsApi
+
+<div>
+    @if (_selectedProduct is not null)
+    {
+        <div class="picker-inline mb-3">
+            <div>
+                <p>
+                    <strong>@_selectedProduct.Name</strong> (@_selectedProduct.Sku) —
+                    @_selectedProduct.UnitPrice.ToString("0.00", System.Globalization.CultureInfo.InvariantCulture) @_selectedProduct.Currency
+                    — @_selectedProduct.Stock in stock
+                </p>
+            </div>
+            <div>
+                <label>Quantity</label>
+                <InputNumber class="form-control" @bind-Value="_quantity" />
+            </div>
+            <div>
+                <button type="button" class="btn btn-primary" @onclick="AddAsync" disabled="@(_quantity < 1)">Add to order</button>
+                <button type="button" class="btn btn-link" @onclick="Clear">Change product</button>
+            </div>
+        </div>
+    }
+    else
+    {
+        <input class="form-control" placeholder="Search products by name, SKU, or category..."
+               @bind="_search" @bind:event="oninput" @onkeyup="OnSearchKeyUp" />
+
+        <ErrorBanner Message="@_searchError" />
+
+        @if (_isSearching)
+        {
+            <LoadingSpinner Text="Searching..." />
+        }
+        else if (_results is { Count: > 0 })
+        {
+            <ul class="search-results">
+                @foreach (var product in _results)
+                {
+                    <li @onclick="() => Select(product)">
+                        @product.Name (@product.Sku) — @product.UnitPrice.ToString("0.00", System.Globalization.CultureInfo.InvariantCulture) @product.Currency — @product.Stock in stock
+                    </li>
+                }
+            </ul>
+        }
+        else if (_hasSearched)
+        {
+            <p>No matching products.</p>
+        }
+    }
+</div>
+
+@code {
+    /// <summary>Fired when the caller confirms a product + quantity to add as an order line item.</summary>
+    [Parameter]
+    public EventCallback<ProductSelection> OnAdd { get; set; }
+
+    private string _search = string.Empty;
+    private List<ArkCloud.Application.DTOs.ProductResponse>? _results;
+    private ArkCloud.Application.DTOs.ProductResponse? _selectedProduct;
+    private int _quantity = 1;
+    private bool _isSearching;
+    private bool _hasSearched;
+    private string? _searchError;
+    private CancellationTokenSource? _debounce;
+
+    private async Task OnSearchKeyUp(Microsoft.AspNetCore.Components.Web.KeyboardEventArgs e)
+    {
+        _debounce?.Cancel();
+
+        if (string.IsNullOrWhiteSpace(_search))
+        {
+            _results = null;
+            _hasSearched = false;
+            _searchError = null;
+            return;
+        }
+
+        _debounce = new CancellationTokenSource();
+        var token = _debounce.Token;
+
+        try
+        {
+            await Task.Delay(300, token);
+        }
+        catch (TaskCanceledException)
+        {
+            return;
+        }
+
+        _isSearching = true;
+        _searchError = null;
+        try
+        {
+            var page = await ProductsApi.GetPagedAsync(search: _search, page: 1, pageSize: 10, cancellationToken: token);
+            _results = page.Items;
+            _hasSearched = true;
+        }
+        catch (OperationCanceledException)
+        {
+            // A newer keystroke superseded this search — ignore.
+        }
+        catch (HttpRequestException ex)
+        {
+            _searchError = $"Could not reach the API: {ex.Message}";
+        }
+        finally
+        {
+            _isSearching = false;
+        }
+    }
+
+    private void Select(ArkCloud.Application.DTOs.ProductResponse product)
+    {
+        _selectedProduct = product;
+        _results = null;
+        _search = string.Empty;
+        _quantity = 1;
+    }
+
+    private async Task AddAsync()
+    {
+        if (_selectedProduct is null || _quantity < 1)
+            return;
+
+        await OnAdd.InvokeAsync(new ProductSelection(_selectedProduct, _quantity));
+        Clear();
+    }
+
+    private void Clear()
+    {
+        _selectedProduct = null;
+        _hasSearched = false;
+        _quantity = 1;
+    }
+
+    public record ProductSelection(ArkCloud.Application.DTOs.ProductResponse Product, int Quantity);
+}

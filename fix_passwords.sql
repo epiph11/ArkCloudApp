@@ -1,0 +1,1 @@
+UPDATE users SET password_hash = 'AQAAAAIAAYagAAAAEMvvtPUFVG4QgOJQmm4UoF2UpYE5OvbnR539uhXuUqlq5d/wHWkqRfzuUNZHsnLEOQ==' WHERE "Id"::text LIKE '99999999-%';

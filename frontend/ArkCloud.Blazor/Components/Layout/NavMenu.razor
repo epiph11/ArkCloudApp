@@ -1,0 +1,26 @@
+<nav class="nav-row">
+    <div class="nav-item">
+        <NavLink class="nav-link" href="" Match="NavLinkMatch.All">
+            Dashboard
+        </NavLink>
+    </div>
+    <AuthorizeView>
+        <Authorized>
+            <div class="nav-item">
+                <NavLink class="nav-link" href="customers">
+                    Customers
+                </NavLink>
+            </div>
+            <div class="nav-item">
+                <NavLink class="nav-link" href="products">
+                    Products
+                </NavLink>
+            </div>
+            <div class="nav-item">
+                <NavLink class="nav-link" href="orders">
+                    Orders
+                </NavLink>
+            </div>
+        </Authorized>
+    </AuthorizeView>
+</nav>
