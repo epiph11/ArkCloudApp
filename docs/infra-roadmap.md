@@ -599,9 +599,9 @@ Tous les appels ne deviennent pas asynchrones (voir la grille du Step 16 quater)
 
 Le risk storming (Step 18.7) évalue le risque d'architecture ; il ne remplace pas une analyse de menaces orientée attaquant.
 
-- [ ] Passer chaque flux de confiance du système au filtre **STRIDE** (Spoofing, Tampering, Repudiation, Information disclosure, Denial of service, Elevation of privilege) — a minima : navigateur→ALB/App Service, Blazor→API, API→base, CI→cloud, rotation automatique→base
-- [ ] Pour chaque menace retenue : contre-mesure existante, ou décision explicite d'accepter, tracée en ADR
-- [ ] **Menaces déjà identifiables sans attendre l'exercice** : le certificat auto-signé de l'ALB rend une interception active indétectable pour un client ; `Jwt:Key` unique sans `kid` interdit toute rotation sans déconnexion ; le PAT GitHub dans le chemin de déploiement est une élévation de privilège si compromis ; aucun rate limiting côté ALB/App Service (celui de l'application seule ne protège pas d'un déni de service en amont)
+- [x] Passer chaque flux de confiance du système au filtre **STRIDE** — fait (Sprint 6), voir `docs/threat-model-stride.md` : navigateur→ALB/App Service, Blazor→API, API→base, CI→cloud, rotation automatique→base
+- [x] Pour chaque menace retenue : contre-mesure existante, ou décision explicite d'accepter, tracée en ADR — fait pour les menaces déjà identifiées (ADR-0003, 0004, 0007, 0008) ; trois menaces restent au statut "à traiter" (logs d'accès ALB, revue des privilèges SQL applicatifs, restaurabilité après rotation), voir résumé en fin de `docs/threat-model-stride.md`
+- [x] **Menaces déjà identifiables sans attendre l'exercice** : le certificat auto-signé de l'ALB rend une interception active indétectable pour un client ; `Jwt:Key` unique sans `kid` interdit toute rotation sans déconnexion ; le PAT GitHub dans le chemin de déploiement est une élévation de privilège si compromis ; aucun rate limiting côté ALB/App Service (celui de l'application seule ne protège pas d'un déni de service en amont) — les quatre tracées en ADR (0003, 0004, 0007, 0008)
 
 ### Classification des données & RGPD
 
@@ -695,9 +695,9 @@ Une fitness function est un **test automatisé de la caractéristique**, exécut
 
 > **Troisième trou** : les décisions d'architecture de ce projet vivent aujourd'hui dans le « Journal des décisions » de ce document et dans des commentaires de code (souvent excellents, mais dispersés). Aucun format ADR standard, aucune traçabilité par décision.
 
-- [ ] Adopter un format ADR minimal dans `docs/adr/` — un fichier par décision : contexte, options envisagées, décision, **conséquences assumées** (positives *et* négatives)
-- [ ] Rétro-documenter les décisions structurantes déjà prises (repo séparé pour Terraform, ECR provisoire vs JFrog, multi-cloud parallèle puis primaire+DR, certificat auto-signé sur l'ALB, rotation automatique Postgres mais pas JWT…)
-- [ ] Toute décision du Sprint 8 (granularité, saga, Kafka) documentée en ADR **au moment de la décision**, pas reconstituée après
+- [x] Adopter un format ADR minimal dans `docs/adr/` — fait (Sprint 6), voir `docs/adr/template.md` et l'index `docs/adr/README.md`
+- [x] Rétro-documenter les décisions structurantes déjà prises — fait (ADR-0001 à 0005) : repo séparé pour Terraform, ECR provisoire vs JFrog, certificat auto-signé sur l'ALB, rotation automatique Postgres mais pas JWT, architecture cible primaire+DR
+- [ ] Toute décision du Sprint 8 (granularité, saga, Kafka) documentée en ADR **au moment de la décision**, pas reconstituée après — process en place (ADR-0007, 0008 déjà écrites au moment de la décision plutôt que reconstituées), à appliquer quand le Sprint 8 démarrera
 - [ ] Les ADR deviennent l'entrée de l'Architecture Repository TOGAF au Sprint 11 (Step 19) plutôt qu'un travail parallèle
 
 ### Analyse de risque structurée (risk storming) — Sprint 6, puis à chaque changement structurant
