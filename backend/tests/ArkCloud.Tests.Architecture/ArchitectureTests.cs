@@ -21,39 +21,60 @@ namespace ArkCloud.Tests.Architecture;
 // Layer selection deliberately uses ResideInAssembly(), not ResideInNamespace(): in this
 // solution one assembly IS one layer (ArkCloud.Domain.dll, .Application.dll, .Infrastructure.dll,
 // .API.dll), so the assembly boundary is the real enforcement boundary — the compiler-level one,
-// not a namespace convention someone could accidentally sidestep. It also avoids relying on any
-// namespace-regex overload whose exact parameter name isn't shown in ArchUnitNET's own
-// documented examples (https://archunitnet.readthedocs.io/en/latest/guide/), which only
-// demonstrate the plain-string forms used throughout this file.
+// not a namespace convention someone could accidentally sidestep.
+//
+// ResideInAssembly() is called with the actual System.Reflection.Assembly object (see the
+// DomainAssembly/ApplicationAssembly/InfrastructureAssembly/ApiAssembly fields below), not a name
+// string. An earlier version of this file used the string overload (e.g.
+// ResideInAssembly("ArkCloud.Domain")) on the assumption it matched the short assembly name —
+// it silently matched zero types instead (confirmed with a temporary diagnostic test that dumped
+// Architecture.Types.Select(t => t.Assembly.Name), which showed the exact right names, while
+// every "Are(Layer)" rule still evaluated as empty). Passing the Assembly object removes the
+// ambiguity about what string format the predicate actually expects.
 public class ArchitectureTests
 {
+    // Named once so both the loader and the layer predicates below reference the exact same
+    // System.Reflection.Assembly objects — see the note on ResideInAssembly() further down for
+    // why that matters.
+    private static readonly System.Reflection.Assembly DomainAssembly =
+        typeof(ArkCloud.Domain.Common.BaseEntity).Assembly;
+    private static readonly System.Reflection.Assembly ApplicationAssembly =
+        typeof(ArkCloud.Application.Services.CustomerAppService).Assembly;
+    private static readonly System.Reflection.Assembly InfrastructureAssembly =
+        typeof(ArkCloud.Infrastructure.Persistence.ArkCloudDbContext).Assembly;
+    private static readonly System.Reflection.Assembly ApiAssembly = typeof(Program).Assembly;
+
     private static readonly ArchUnitNET.Domain.Architecture Architecture = new ArchLoader()
-        .LoadAssemblies(
-            typeof(ArkCloud.Domain.Common.BaseEntity).Assembly,
-            typeof(ArkCloud.Application.Services.CustomerAppService).Assembly,
-            typeof(ArkCloud.Infrastructure.Persistence.ArkCloudDbContext).Assembly,
-            typeof(Program).Assembly
-        )
+        .LoadAssemblies(DomainAssembly, ApplicationAssembly, InfrastructureAssembly, ApiAssembly)
         .Build();
 
+    // FIX (Sprint 6, found via a real local test run — every single "Are(Layer)"-based rule below
+    // was silently matching zero types): ResideInAssembly(string) matches against the assembly's
+    // full identity string (name + version + culture + public key token), not the short name a
+    // diagnostic dump of Assembly.Name shows you — passing just "ArkCloud.Domain" therefore never
+    // matched anything, and every layer predicate was silently empty. ArchUnitNET's own "requires
+    // positive evaluation" guard is what surfaced this (it refuses to pass a rule that matched
+    // nothing) rather than the rule appearing to succeed vacuously. Fixed by passing the actual
+    // loaded System.Reflection.Assembly object instead of a name string — no ambiguity about what
+    // string format is expected.
     private readonly IObjectProvider<IType> DomainLayer = Types()
         .That()
-        .ResideInAssembly("ArkCloud.Domain")
+        .ResideInAssembly(DomainAssembly)
         .As("ArkCloud.Domain");
 
     private readonly IObjectProvider<IType> ApplicationLayer = Types()
         .That()
-        .ResideInAssembly("ArkCloud.Application")
+        .ResideInAssembly(ApplicationAssembly)
         .As("ArkCloud.Application");
 
     private readonly IObjectProvider<IType> InfrastructureLayer = Types()
         .That()
-        .ResideInAssembly("ArkCloud.Infrastructure")
+        .ResideInAssembly(InfrastructureAssembly)
         .As("ArkCloud.Infrastructure");
 
     private readonly IObjectProvider<IType> ApiLayer = Types()
         .That()
-        .ResideInAssembly("ArkCloud.API")
+        .ResideInAssembly(ApiAssembly)
         .As("ArkCloud.API");
 
     // Substring match on the full (namespace-qualified) name — deliberately broad rather than
