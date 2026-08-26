@@ -44,7 +44,7 @@
                         <tr>
                             <td>@order.CustomerName</td>
                             <td>@order.Status</td>
-                            <td>@order.TotalAmount.ToString("0.00")</td>
+                            <td>@order.TotalAmount.ToString("0.00", System.Globalization.CultureInfo.InvariantCulture)</td>
                             <td><a href="@($"orders/{order.Id}")">View</a></td>
                         </tr>
                     }

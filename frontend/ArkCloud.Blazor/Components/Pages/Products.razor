@@ -50,7 +50,7 @@
                             <td>@product.Name</td>
                             <td>@product.Sku</td>
                             <td>@product.Category</td>
-                            <td>@product.UnitPrice.ToString("0.00") @product.Currency</td>
+                            <td>@product.UnitPrice.ToString("0.00", System.Globalization.CultureInfo.InvariantCulture) @product.Currency</td>
                             <td>@product.Stock</td>
                             <td><a href="@($"products/{product.Id}")">View</a></td>
                             <td>

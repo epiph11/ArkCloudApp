@@ -35,14 +35,14 @@
                             <td>@item.ProductName</td>
                             <td>@item.Sku</td>
                             <td>@item.Quantity</td>
-                            <td>@item.UnitPrice.ToString("0.00")</td>
-                            <td>@item.LineTotal.ToString("0.00")</td>
+                            <td>@item.UnitPrice.ToString("0.00", System.Globalization.CultureInfo.InvariantCulture)</td>
+                            <td>@item.LineTotal.ToString("0.00", System.Globalization.CultureInfo.InvariantCulture)</td>
                         </tr>
                     }
                 </tbody>
             </table>
 
-            <p><strong>Total: @_order.TotalAmount.ToString("0.00")</strong></p>
+            <p><strong>Total: @_order.TotalAmount.ToString("0.00", System.Globalization.CultureInfo.InvariantCulture)</strong></p>
 
             <ErrorBanner Message="@_actionError" />
 

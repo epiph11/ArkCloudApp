@@ -23,7 +23,7 @@
                 <tbody>
                     <tr><th>SKU</th><td>@_product.Sku</td></tr>
                     <tr><th>Category</th><td>@_product.Category</td></tr>
-                    <tr><th>Price</th><td>@_product.UnitPrice.ToString("0.00") @_product.Currency</td></tr>
+                    <tr><th>Price</th><td>@_product.UnitPrice.ToString("0.00", System.Globalization.CultureInfo.InvariantCulture) @_product.Currency</td></tr>
                     <tr><th>Stock</th><td>@_product.Stock</td></tr>
                 </tbody>
             </table>

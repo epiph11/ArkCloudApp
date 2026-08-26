@@ -102,7 +102,7 @@
                                     <tr>
                                         <td>@product.Name</td>
                                         <td>@product.Sku</td>
-                                        <td>@product.UnitPrice.ToString("0.00") @product.Currency</td>
+                                        <td>@product.UnitPrice.ToString("0.00", System.Globalization.CultureInfo.InvariantCulture) @product.Currency</td>
                                     </tr>
                                 }
                             </tbody>
@@ -131,7 +131,7 @@
                                 {
                                     <tr>
                                         <td>@order.Status</td>
-                                        <td>@order.TotalAmount.ToString("0.00")</td>
+                                        <td>@order.TotalAmount.ToString("0.00", System.Globalization.CultureInfo.InvariantCulture)</td>
                                     </tr>
                                 }
                             </tbody>

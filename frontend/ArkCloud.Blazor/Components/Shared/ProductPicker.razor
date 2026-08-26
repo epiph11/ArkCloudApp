@@ -7,7 +7,7 @@
             <div>
                 <p>
                     <strong>@_selectedProduct.Name</strong> (@_selectedProduct.Sku) —
-                    @_selectedProduct.UnitPrice.ToString("0.00") @_selectedProduct.Currency
+                    @_selectedProduct.UnitPrice.ToString("0.00", System.Globalization.CultureInfo.InvariantCulture) @_selectedProduct.Currency
                     — @_selectedProduct.Stock in stock
                 </p>
             </div>
@@ -38,7 +38,7 @@
                 @foreach (var product in _results)
                 {
                     <li @onclick="() => Select(product)">
-                        @product.Name (@product.Sku) — @product.UnitPrice.ToString("0.00") @product.Currency — @product.Stock in stock
+                        @product.Name (@product.Sku) — @product.UnitPrice.ToString("0.00", System.Globalization.CultureInfo.InvariantCulture) @product.Currency — @product.Stock in stock
                     </li>
                 }
             </ul>

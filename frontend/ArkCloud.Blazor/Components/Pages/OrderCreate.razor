@@ -33,15 +33,15 @@
                         <tr>
                             <td>@item.Product.Name</td>
                             <td>@item.Quantity</td>
-                            <td>@item.Product.UnitPrice.ToString("0.00") @item.Product.Currency</td>
-                            <td>@((item.Product.UnitPrice * item.Quantity).ToString("0.00"))</td>
+                            <td>@item.Product.UnitPrice.ToString("0.00", System.Globalization.CultureInfo.InvariantCulture) @item.Product.Currency</td>
+                            <td>@((item.Product.UnitPrice * item.Quantity).ToString("0.00", System.Globalization.CultureInfo.InvariantCulture))</td>
                             <td><button type="button" class="btn btn-link" @onclick="() => RemoveItem(item)">Remove</button></td>
                         </tr>
                     }
                 </tbody>
             </table>
 
-            <p><strong>Total: @_items.Sum(i => i.Product.UnitPrice * i.Quantity).ToString("0.00")</strong></p>
+            <p><strong>Total: @_items.Sum(i => i.Product.UnitPrice * i.Quantity).ToString("0.00", System.Globalization.CultureInfo.InvariantCulture)</strong></p>
         }
         else
         {
