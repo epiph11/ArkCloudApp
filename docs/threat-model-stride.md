@@ -69,4 +69,4 @@ Celles explicitement **acceptées** (tracées en ADR, pas ignorées) :
 - `GHCR_PAT`, secret humain dans le chemin de déploiement (ADR-0007)
 - Absence de rate limiting au niveau infra (ADR-0008)
 
-Les deux restantes ("à traiter") sont les candidates naturelles pour la suite immédiate du Sprint 6 — ce document n'est pas un exercice ponctuel, à rejouer à chaque changement structurant (Sprint 8, Sprint 9) comme prévu au Step 18.7.
+Ce document n'est pas un exercice ponctuel, à rejouer à chaque changement structurant (Sprint 8, Sprint 9) comme prévu au Step 18.7 — de nouvelles menaces "à traiter" y apparaîtront naturellement à mesure que l'architecture évolue.
