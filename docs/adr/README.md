@@ -16,6 +16,7 @@ Numérotation séquentielle, jamais réutilisée — une décision remplacée ob
 | [0007](0007-pat-github-pipeline-risque-accepte.md) | `GHCR_PAT` — risque accepté | Acceptée |
 | [0008](0008-rate-limiting-perimetre-applicatif-seul.md) | Rate limiting applicatif seul, rien en infra | Acceptée (temporaire) |
 | [0009](0009-strategie-branches-et-versionning.md) | Stratégie de branches et de versionning (trunk-based, SemVer 0.x, Conventional Commits) | Acceptée |
+| [0010](0010-bootstrap-arkcloud-app-azure-kudu.md) | Bootstrap/rotation `arkcloud_app` sur Azure — Kudu manuel plutôt qu'automatisation dédiée | Acceptée |
 
 *(0006 réservée — voir `docs/threat-model-stride.md`, la rotation `Jwt:Key` est couverte par l'ADR-0004 plutôt que dupliquée dans une ADR séparée ; le numéro reste sauté plutôt que réattribué, pour ne jamais faire porter à un même numéro deux décisions différentes selon quand on lit ce repo.)*
 
