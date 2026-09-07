@@ -1,6 +1,6 @@
 # ADR-0010 : Bootstrap/rotation du rôle `arkcloud_app` sur Azure — procédure manuelle via Kudu, plutôt qu'une automatisation dédiée
 
-**Statut** : Acceptée
+**Statut** : Acceptée (implémentation reportée en backlog — voir addendum du 07/09/2026)
 **Date** : 2026-08 (Sprint 6)
 **Sprint** : 6
 
@@ -40,3 +40,11 @@ Ce choix n'est pas motivé par le coût : Functions aurait tout aussi bien pu to
 - Écrire la procédure Kudu elle-même (script SQL + étapes SSH documentées) — pas encore fait au moment de cette ADR.
 - Ajouter `ArkCloudAppRole--Password (Azure)` à `.github/secrets-inventory.json` avec une échéance de 90 jours, sur le même modèle que les entrées existantes.
 - Si un jour la fréquence de rotation devait descendre sous 90 jours, ou si Azure Functions Flex Consumption mûrit (les trois limitations rencontrées ici sont d'assez récentes fonctionnalités, susceptibles d'être corrigées), cette décision mériterait d'être réexaminée plutôt que reconduite par défaut.
+
+## Addendum (07/09/2026) — deux corrections, décision inchangée
+
+**Fait erroné corrigé** : cette ADR affirmait `modules/azure/functions-experiment` "maintenant démonté" (Option 3). Faux — vérifié dans `environments/dev/main.tf` (le bloc `module "functions_experiment"` y est toujours) et dans un `terraform plan`/`apply` réel du même jour (la ressource `module.functions_experiment.azurerm_function_app_flex_consumption.this` y apparaît toujours, `Refreshing state`). L'étape de démontage documentée dans `modules/azure/functions-experiment/README.md` ("Démonter (une fois l'essai concluant)") n'a jamais été exécutée. Le Function App tourne donc toujours en production aujourd'hui, avec `arkcloud_app` opérationnel dessus — c'est, de fait, le mécanisme qui a servi à la bascule réelle vers `arkcloud_app` (tâche #84), pas Kudu.
+
+**Prémisse de l'Option 4 à vérifier avant implémentation** : la Décision ci-dessus suppose que la console Kudu (SSH) fonctionne "telle quelle" sur `app-arkcloud-api-dev` parce que l'App Service a déjà l'intégration VNet. C'est vrai pour l'accès réseau, mais insuffisant : `app-arkcloud-api-dev` tourne une **image Docker custom** (pas un stack Azure managé), et le Dockerfile de `ArkCloud.API` n'installe ni ne configure aujourd'hui de serveur SSH. Pour un conteneur Linux custom, Kudu SSH exige que l'image elle-même embarque `sshd` (port 2222, démarré en parallèle du process principal — pattern documenté par Microsoft pour les conteneurs custom), ce qui n'a jamais été posé dans ce projet. La phrase "Kudu... est un accès qui existe déjà" (section Conséquences positives) n'a donc jamais été vérifiée en pratique et est probablement fausse telle quelle.
+
+**Décision** : la Option 4 (Kudu) reste le choix retenu — discuté avec l'utilisateur, qui souhaite explicitement tester cette voie plutôt que consacrer davantage de ressources Azure Functions au sujet. Son implémentation (ajout de `sshd` au Dockerfile, rebuild, vérification réelle du SSH) est repostée en fond de backlog (tâche #83), pas abandonnée. **En attendant**, le Function App reste en place et sert de mécanisme de facto pour toute rotation réelle de `arkcloud_app` côté Azure qui serait nécessaire avant que Kudu soit implémenté — ne pas le démonter tant que Kudu n'est pas prouvé fonctionnel en remplacement.
