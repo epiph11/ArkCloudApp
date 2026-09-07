@@ -164,7 +164,7 @@ sequenceDiagram
     AZ->>WEB: route directe
     WEB->>API: JWT bearer token
     API->>API: policy d'autorisation par rôle
-    API->>DB: connexion arkcloudadmin (à corriger, item STRIDE en cours)
+    API->>DB: connexion arkcloud_app (DML seul, Sprint 6)
     DB-->>API: résultat requête
     API-->>WEB: réponse
     WEB-->>U: page rendue
@@ -205,17 +205,55 @@ sequenceDiagram
     end
 ```
 
-### Résumé STRIDE — état réel au 27/08/2026
+### Le rôle applicatif `arkcloud_app` — remédiation STRIDE flux 3, en détail
+
+`ArkCloud.API` se connectait à Postgres comme `arkcloudadmin` (compte admin du serveur) jusqu'au Sprint 6 — bien plus de droits que nécessaire pour du CRUD applicatif. Bascule réelle vers un rôle dédié DML-seul, avec un mécanisme de rotation différent par cloud (les deux Postgres sont des instances indépendantes, sans mécanisme de rotation partagé) :
+
+```mermaid
+flowchart TB
+    subgraph admin["Compte admin (bootstrap/migrations seulement)"]
+        AA["arkcloudadmin (Azure)<br/>arkcloudadmin (AWS)"]
+    end
+
+    subgraph app["Rôle applicatif (trafic API courant)"]
+        AC["arkcloud_app<br/>DML seul : SELECT / INSERT / UPDATE / DELETE<br/>jamais CREATE / DROP / ALTER"]
+    end
+
+    AA -->|"dotnet ef database update<br/>(humain, déclenché à la main)"| SCHEMA[(Schéma Postgres)]
+    AC -->|"trafic ArkCloud.API<br/>(ConnectionStrings--DefaultConnection)"| SCHEMA
+
+    subgraph rotAWS["Rotation AWS — automatique, 90 jours"]
+        LAMBDA["Lambda secret-rotation<br/>(target_role = app)"]
+        SM["Secrets Manager"]
+        LAMBDA -->|"CREATE/ALTER ROLE + GRANT<br/>teste avant de promouvoir"| AC
+        LAMBDA --> SM
+    end
+
+    subgraph rotAZ["Rotation Azure — manuelle, déclenchement humain"]
+        FUNC["Function App<br/>(modules/azure/functions-experiment)"]
+        KV["Key Vault"]
+        FUNC -->|"CREATE/ALTER ROLE + GRANT<br/>teste avant de publier"| AC
+        FUNC --> KV
+    end
+
+    style app fill:#F1EFE8,stroke:#5F5E5A
+```
+
+**Pourquoi deux mécanismes différents plutôt qu'un seul partagé** : côté AWS, la Lambda qui rotate déjà `arkcloudadmin` tourne dans le VPC et peut donc aussi bien gérer `arkcloud_app` sans nouvel accès réseau — fusionné en un seul module (`target_role = "app"`). Côté Azure, l'Automation Runbook qui rotate `arkcloudadmin` n'a besoin d'aucun accès réseau (appel API de gestion pur, jamais de SQL direct) — donc rien à réutiliser pour du SQL réel. L'option la plus "propre" (donner un accès réseau au Runbook via un Hybrid Runbook Worker) coûterait une VM permanente pour une tâche trimestrielle ; retenu à la place : un Function App Azure (identité managée, testé en conditions réelles, idempotent). Détail complet et alternative envisagée (Kudu SSH, en backlog) : `docs/adr/0010-bootstrap-arkcloud-app-azure-kudu.md`.
+
+### Résumé STRIDE — état réel au 07/09/2026
 
 | Flux | Menace | État |
 |---|---|---|
 | 1. Navigateur → ALB/App Service | Certificat auto-signé (AWS) | Acceptée — ADR-0003 |
 | 1. Navigateur → ALB/App Service | Logs d'accès ALB absents | **Mitigée (Sprint 6)** |
 | 1. Navigateur → ALB/App Service | Pas de rate limiting infra | Acceptée pour l'instant — ADR-0008 |
-| 3. API → base | Compte applicatif trop privilégié | **En cours de correction** (rôle `arkcloud_app`) |
+| 3. API → base | Compte applicatif trop privilégié | **Résolu (Sprint 6)** — bascule réelle vers `arkcloud_app` sur les deux clouds, voir schéma ci-dessus |
 | 3. API → base | Données personnelles dans les logs | Mitigée (Sprint 6, `AuthService.cs`) |
 | 4. CI → cloud | `GHCR_PAT`, secret humain | Acceptée — ADR-0007, rotation automatisée depuis Sprint 6 |
-| 5. Rotation → base | Restaurabilité après rotation jamais testée | À traiter |
+| 5. Rotation → base | Restaurabilité après rotation jamais testée | **Résolu (Sprint 6)** — drill réel exécuté (snapshot, rotation, restauration isolée, procédure de resynchronisation testée), voir `docs/threat-model-stride.md` |
+
+Aucune menace ne reste au statut "à traiter" à ce stade — voir `docs/threat-model-stride.md` pour le détail complet et les acceptations tracées en ADR.
 
 ---
 
