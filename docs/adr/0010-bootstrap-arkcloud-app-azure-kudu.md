@@ -49,7 +49,7 @@ Ce choix n'est pas motivé par le coût : Functions aurait tout aussi bien pu to
 
 **Décision** : la Option 4 (Kudu) reste le choix retenu — discuté avec l'utilisateur, qui souhaite explicitement tester cette voie plutôt que consacrer davantage de ressources Azure Functions au sujet. Son implémentation (ajout de `sshd` au Dockerfile, rebuild, vérification réelle du SSH) est repostée en fond de backlog (tâche #83), pas abandonnée. **En attendant**, le Function App reste en place et sert de mécanisme de facto pour toute rotation réelle de `arkcloud_app` côté Azure qui serait nécessaire avant que Kudu soit implémenté — ne pas le démonter tant que Kudu n'est pas prouvé fonctionnel en remplacement.
 
-## Addendum (11/09/2026) — implémentation démarrée, non encore vérifiée en conditions réelles
+## Addendum (11/09/2026, matin) — implémentation démarrée, non encore vérifiée en conditions réelles
 
 `sshd` (port 2222, pattern Microsoft standard pour conteneurs Linux custom) ajouté à
 `deploy/docker/Dockerfile.api` avec `postgresql-client` pour disposer de `psql` dans la session
@@ -61,5 +61,24 @@ SSH. Runbook opérationnel écrit :
 documenté mais jamais testé sur ce projet), puis exécuter une vraie rotation de bout en bout.
 Tant que ce n'est pas fait, le Function App (Option 3) reste le mécanisme de facto — ne pas le
 démonter. Le chemin exact du script SQL dans le conteneur (`scripts/sql/bootstrap-arkcloud-app-role.sql`
+
+## Addendum (11/09/2026, après-midi) — SSH Kudu prouvé fonctionnel, trois bugs réels corrigés
+
+La prémisse de l'addendum du 07/09/2026 est maintenant vérifiée, pas juste corrigée sur le papier :
+session Kudu ouverte sur `app-arkcloud-api-dev` (`SSH CONNECTION ESTABLISHED`, prompt shell root
+réel), `psql --version` répond. Le chemin décrit à l'Option 4 fonctionne bel et bien.
+
+Le trajet jusque-là a mis au jour trois bugs concrets, aucun anticipé au moment de l'implémentation
+initiale — détail dans `ArkCloudInfra/docs/runbooks/rotate-arkcloud-app-azure-kudu.md` §Statut :
+filtre `paths` du workflow CI qui ignorait `deploy/docker/**`, clés hôte SSH gravées dans l'image
+et signalées par Trivy, et absence totale de mécanisme de repull d'image côté Azure (existait déjà
+côté AWS/ECS mais jamais porté côté Azure). Les trois sont corrigés.
+
+**Ce qui reste réellement en suspens** (contrairement à l'ancien texte ci-dessus, maintenant
+dépassé sur le point SSH) : exécuter une rotation complète de bout en bout — script SQL, écriture
+du nouveau mot de passe en Key Vault, restart applicatif, mise à jour de
+`.github/secrets-inventory.json`. Tant que ça n'est pas fait, le Function App (Option 3) reste le
+mécanisme de facto pour toute rotation réelle nécessaire avant cette validation finale — ne pas le
+démonter.
 vit dans `ArkCloudInfra`, pas dans l'image `ArkCloud.API`) est une hypothèse à vérifier au premier
 essai réel, documentée comme telle dans le runbook.
