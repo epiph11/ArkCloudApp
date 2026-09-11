@@ -1,7 +1,5 @@
 using Amazon;
 using Amazon.RDS.Util;
-using Amazon.SecurityToken;
-using Amazon.SecurityToken.Model;
 using ArkCloud.Application.Interfaces;
 using ArkCloud.Infrastructure.Authentication;
 using ArkCloud.Infrastructure.Persistence;
@@ -87,27 +85,8 @@ public static class InfrastructureServiceRegistration
         // successRefreshInterval < 15 min (durée de vie réelle du token) par marge de sécurité,
         // même logique que le commentaire du token Entra ID côté proposition Azure de l'ADR-0011.
         builder.UsePeriodicPasswordProvider(
-            passwordProvider: async (_, ct) =>
-            {
-                // Diagnostic temporaire (10/09/2026) : GRANT rds_iam confirmé réellement présent
-                // côté Postgres (vérifié depuis pg_auth_members, pas déduit), policy IAM et
-                // resource_id confirmés corrects côté AWS — dernière cause documentée par AWS
-                // ("un rôle IAM incorrect est utilisé") jamais vérifiée depuis l'intérieur du
-                // conteneur. Équivalent direct de `aws sts get-caller-identity`, au moment exact
-                // où le token est généré. À retirer une fois la cause confirmée/corrigée.
-                try
-                {
-                    using var sts = new AmazonSecurityTokenServiceClient(regionEndpoint);
-                    var identity = await sts.GetCallerIdentityAsync(new GetCallerIdentityRequest(), ct);
-                    Console.WriteLine($"[DIAG passwordless-aws] Identité résolue pour le token RDS IAM : Arn={identity.Arn} Account={identity.Account}");
-                }
-                catch (Exception ex)
-                {
-                    Console.WriteLine($"[DIAG passwordless-aws] Échec de la résolution d'identité STS : {ex}");
-                }
-
-                return RDSAuthTokenGenerator.GenerateAuthToken(regionEndpoint, host, port, username);
-            },
+            passwordProvider: (_, _) =>
+                Task.FromResult(RDSAuthTokenGenerator.GenerateAuthToken(regionEndpoint, host, port, username)),
             successRefreshInterval: TimeSpan.FromMinutes(10),
             failureRefreshInterval: TimeSpan.FromSeconds(5));
 
