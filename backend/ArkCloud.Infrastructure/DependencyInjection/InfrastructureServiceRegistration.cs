@@ -86,7 +86,7 @@ public static class InfrastructureServiceRegistration
         // même logique que le commentaire du token Entra ID côté proposition Azure de l'ADR-0011.
         builder.UsePeriodicPasswordProvider(
             passwordProvider: (_, _) =>
-                Task.FromResult(RDSAuthTokenGenerator.GenerateAuthToken(regionEndpoint, host, port, username)),
+                new ValueTask<string>(RDSAuthTokenGenerator.GenerateAuthToken(regionEndpoint, host, port, username)),
             successRefreshInterval: TimeSpan.FromMinutes(10),
             failureRefreshInterval: TimeSpan.FromSeconds(5));
 
