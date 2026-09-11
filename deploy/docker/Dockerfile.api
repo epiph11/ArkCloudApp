@@ -9,9 +9,29 @@ RUN dotnet publish backend/ArkCloud.API/ArkCloud.API.csproj -c Release -o /app/p
 FROM mcr.microsoft.com/dotnet/aspnet:10.0 AS runtime
 WORKDIR /app
 
+# Sprint 6 -- ADR-0010 (rotation arkcloud_app via Kudu). Pour un conteneur Linux custom, la
+# console Kudu (SSH) d'App Service n'est PAS disponible par defaut -- l'image doit embarquer et
+# demarrer elle-meme sshd sur le port 2222, pattern documente par Microsoft pour les "custom
+# containers" (addendum ADR-0010 du 07/09/2026, qui corrige la premisse initiale de cette ADR).
+# postgresql-client fournit `psql`, utilise depuis la session SSH pour executer
+# scripts/sql/bootstrap-arkcloud-app-role.sql (voir docs/runbooks/rotate-arkcloud-app-azure-kudu.md).
+# Mot de passe root "Docker!" : pattern officiel Microsoft pour ce scenario (learn.microsoft.com,
+# "Configure a custom container" -- SSH into a custom container) -- ce port n'est jamais expose
+# publiquement, seulement atteignable via le tunnel authentifie scm.azurewebsites.net (Azure AD /
+# publish credentials), jamais directement depuis Internet.
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends openssh-server postgresql-client \
+    && echo "root:Docker!" | chpasswd \
+    && mkdir -p /run/sshd \
+    && rm -rf /var/lib/apt/lists/*
+
+COPY deploy/docker/sshd_config /etc/ssh/sshd_config
+COPY deploy/docker/start-api.sh /start-api.sh
+RUN chmod +x /start-api.sh
+
 COPY --from=build /app/publish .
 
-EXPOSE 8080
+EXPOSE 8080 2222
 ENV ASPNETCORE_URLS=http://+:8080
 
-ENTRYPOINT ["dotnet", "ArkCloud.API.dll"]
+ENTRYPOINT ["/start-api.sh"]

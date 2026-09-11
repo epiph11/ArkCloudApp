@@ -1,6 +1,6 @@
 # ADR-0010 : Bootstrap/rotation du rôle `arkcloud_app` sur Azure — procédure manuelle via Kudu, plutôt qu'une automatisation dédiée
 
-**Statut** : Acceptée (implémentation reportée en backlog — voir addendum du 07/09/2026)
+**Statut** : Acceptée (implémentation en cours — voir addendum du 11/09/2026)
 **Date** : 2026-08 (Sprint 6)
 **Sprint** : 6
 
@@ -48,3 +48,18 @@ Ce choix n'est pas motivé par le coût : Functions aurait tout aussi bien pu to
 **Prémisse de l'Option 4 à vérifier avant implémentation** : la Décision ci-dessus suppose que la console Kudu (SSH) fonctionne "telle quelle" sur `app-arkcloud-api-dev` parce que l'App Service a déjà l'intégration VNet. C'est vrai pour l'accès réseau, mais insuffisant : `app-arkcloud-api-dev` tourne une **image Docker custom** (pas un stack Azure managé), et le Dockerfile de `ArkCloud.API` n'installe ni ne configure aujourd'hui de serveur SSH. Pour un conteneur Linux custom, Kudu SSH exige que l'image elle-même embarque `sshd` (port 2222, démarré en parallèle du process principal — pattern documenté par Microsoft pour les conteneurs custom), ce qui n'a jamais été posé dans ce projet. La phrase "Kudu... est un accès qui existe déjà" (section Conséquences positives) n'a donc jamais été vérifiée en pratique et est probablement fausse telle quelle.
 
 **Décision** : la Option 4 (Kudu) reste le choix retenu — discuté avec l'utilisateur, qui souhaite explicitement tester cette voie plutôt que consacrer davantage de ressources Azure Functions au sujet. Son implémentation (ajout de `sshd` au Dockerfile, rebuild, vérification réelle du SSH) est repostée en fond de backlog (tâche #83), pas abandonnée. **En attendant**, le Function App reste en place et sert de mécanisme de facto pour toute rotation réelle de `arkcloud_app` côté Azure qui serait nécessaire avant que Kudu soit implémenté — ne pas le démonter tant que Kudu n'est pas prouvé fonctionnel en remplacement.
+
+## Addendum (11/09/2026) — implémentation démarrée, non encore vérifiée en conditions réelles
+
+`sshd` (port 2222, pattern Microsoft standard pour conteneurs Linux custom) ajouté à
+`deploy/docker/Dockerfile.api` avec `postgresql-client` pour disposer de `psql` dans la session
+SSH. Runbook opérationnel écrit :
+`ArkCloudInfra/docs/runbooks/rotate-arkcloud-app-azure-kudu.md`.
+
+**Non encore fait** : déployer cette image, ouvrir une session Kudu réelle sur
+`app-arkcloud-api-dev` et vérifier que SSH fonctionne effectivement (le pattern Microsoft est
+documenté mais jamais testé sur ce projet), puis exécuter une vraie rotation de bout en bout.
+Tant que ce n'est pas fait, le Function App (Option 3) reste le mécanisme de facto — ne pas le
+démonter. Le chemin exact du script SQL dans le conteneur (`scripts/sql/bootstrap-arkcloud-app-role.sql`
+vit dans `ArkCloudInfra`, pas dans l'image `ArkCloud.API`) est une hypothèse à vérifier au premier
+essai réel, documentée comme telle dans le runbook.
