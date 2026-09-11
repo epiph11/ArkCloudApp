@@ -1,6 +1,7 @@
 # ADR-0010 : Bootstrap/rotation du rôle `arkcloud_app` sur Azure — procédure manuelle via Kudu, plutôt qu'une automatisation dédiée
 
-**Statut** : Acceptée (implémentation en cours — voir addendum du 11/09/2026)
+**Statut** : Acceptée et implémentée — rotation complète vérifiée en conditions réelles le
+11/09/2026 (voir addenda ci-dessous).
 **Date** : 2026-08 (Sprint 6)
 **Sprint** : 6
 
@@ -80,5 +81,26 @@ du nouveau mot de passe en Key Vault, restart applicatif, mise à jour de
 `.github/secrets-inventory.json`. Tant que ça n'est pas fait, le Function App (Option 3) reste le
 mécanisme de facto pour toute rotation réelle nécessaire avant cette validation finale — ne pas le
 démonter.
+
+## Addendum (11/09/2026, soir) — rotation complète réussie, ADR close
+
+Rotation de bout en bout exécutée avec succès : `ALTER ROLE`/`GRANT` via Kudu+psql,
+`ConnectionStrings--DefaultConnection` réécrit dans Key Vault, `app-arkcloud-api-dev` redémarré,
+`/health` confirmé 200. Détail dans
+`ArkCloudInfra/docs/runbooks/rotate-arkcloud-app-azure-kudu.md` §Statut, y compris deux bugs réels
+de script SQL trouvés et corrigés (substitution `:'var'` invisible à l'intérieur d'un bloc `DO $$`,
+fragilité des commandes tapées à la main dans le terminal web par rapport à un script collé une
+fois via heredoc).
+
+L'Option 4 (Kudu) est donc pleinement opérationnelle et devient le mécanisme réel de rotation.
+Conséquence directe : le Function App (Option 3, `modules/azure/functions-experiment`) n'est plus
+nécessaire comme filet de sécurité — il peut être démonté au prochain ménage d'infrastructure
+(pas fait dans le cadre de cette session, juste débloqué).
+
+Point process, pas de code : plusieurs valeurs de mot de passe générées pendant cette première
+rotation ont fini exposées en clair dans la conversation avec l'assistant par copier-coller répété
+(erreur humaine, pas une faille du mécanisme lui-même) — chacune traitée comme grillée et
+regénérée avant la validation finale. À garder en tête pour la prochaine rotation : ne jamais faire
+transiter un secret par un canal de discussion.
 vit dans `ArkCloudInfra`, pas dans l'image `ArkCloud.API`) est une hypothèse à vérifier au premier
 essai réel, documentée comme telle dans le runbook.
