@@ -9,11 +9,17 @@ on:
     tags: ["v*"]
     paths:
       - "backend/**"
+      - "deploy/docker/Dockerfile.api"
+      - "deploy/docker/sshd_config"
+      - "deploy/docker/start-api.sh"
       - ".github/workflows/arkcloud-backend-ci.yml"
   pull_request:
     branches: [main, staging, develop]
     paths:
       - "backend/**"
+      - "deploy/docker/Dockerfile.api"
+      - "deploy/docker/sshd_config"
+      - "deploy/docker/start-api.sh"
       - ".github/workflows/arkcloud-backend-ci.yml"
   # Manual trigger — not subject to the paths filters above, useful for retesting
   # publish-image (e.g. AWS OIDC/ECR changes) without needing an unrelated file edit.
@@ -131,6 +137,11 @@ jobs:
 
       - name: Build Docker image
         run: docker build -f deploy/docker/Dockerfile.api -t ${{ env.IMAGE_NAME }}:${{ github.sha }} -t ${{ env.IMAGE_NAME }}:${{ env.ENV_TAG }} .
+        # Note (Sprint 6, tache #83) : ce Dockerfile depend aussi de deploy/docker/sshd_config et
+        # deploy/docker/start-api.sh (COPY). Le filtre `paths` du declencheur `push` ci-dessus doit
+        # couvrir les trois fichiers, pas juste ce Dockerfile -- sinon un changement dans l'un des
+        # deux autres ne redeclenche pas ce build (bug reel rencontre lors de l'ajout de sshd :
+        # le premier commit touchant seulement deploy/docker/** n'a declenche AUCUN run CI).
 
       # Scans the image just built, before it ever reaches the registry. exit-code: '1' makes
       # this step (and therefore the job) fail on any CRITICAL/HIGH finding that has a known
