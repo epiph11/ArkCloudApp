@@ -1,0 +1,61 @@
+name: DAST — scan dynamique (OWASP ZAP)
+
+# Backlog #102 (zéro-coût, "DAST") — complète le SAST déjà en place (Snyk/SonarCloud sur le code
+# source, arkcloud-backend-ci.yml / arkcloud-frontend-ci.yml) par un scan qui tape sur l'app
+# RÉELLEMENT déployée en dev (réponses HTTP effectives, en-têtes de sécurité, endpoints exposés) —
+# une classe de findings que l'analyse statique ne voit jamais.
+#
+# workflow_dispatch uniquement, volontairement pas de déclencheur planifié/push : l'environnement
+# dev n'est pas garanti disponible (voir dev-env-down.yml, arrêt à la demande) — un cron qui tombe
+# pendant que l'environnement est éteint échouerait bruyamment pour rien. À lancer à la main après
+# un dev-env-up.yml, ou juste avant de clore une session de test.
+#
+# Exploratoire pour l'instant (continue-on-error sur les deux scans, même pattern que NDepend/Snyk
+# container dans arkcloud-backend-ci.yml) : premier passage, findings pas encore triés entre "vrai
+# problème" et "bruit attendu sur un dev B1 sans WAF". À durcir (retirer continue-on-error) une
+# fois un premier rapport lu et les faux positifs connus ajoutés à un fichier de règles ZAP dédié.
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  issues: write # zaproxy/action-baseline peut ouvrir une issue de suivi si demandé plus tard
+
+jobs:
+  zap-api:
+    name: ZAP baseline — API
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # Image officielle OWASP ZAP, gratuite, pas de token/compte nécessaire. Scan "baseline" =
+      # spider passif + règles actives non-intrusives (pas de scan actif agressif qui pourrait
+      # écrire des données ou déclencher le cost-guard via une charge inhabituelle) — adapté à un
+      # environnement dev partagé plutôt qu'un scan "full" réservé à un environnement jetable.
+      - name: ZAP baseline scan — API
+        uses: zaproxy/action-baseline@v0.14.0
+        continue-on-error: true
+        with:
+          target: "https://app-arkcloud-api-dev.azurewebsites.net"
+          # /health n'exerce aucune route applicative réelle (voir Program.cs — pas de check DB) ;
+          # le spider ZAP part de la racine et suit les liens qu'il trouve, y compris ceux exposés
+          # par Swagger (Swashbuckle.AspNetCore, activé dans ArkCloud.API.csproj) si accessible.
+          cmd_options: "-a"
+          artifact_name: "zap-report-api"
+
+  zap-web:
+    name: ZAP baseline — Blazor
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: ZAP baseline scan — Blazor
+        uses: zaproxy/action-baseline@v0.14.0
+        continue-on-error: true
+        with:
+          target: "https://app-arkcloud-web-dev.azurewebsites.net"
+          cmd_options: "-a"
+          artifact_name: "zap-report-web"
