@@ -1,8 +1,8 @@
 # ADR-0011 : Authentification passwordless pour `arkcloud_app` (IAM DB auth AWS / Entra ID Azure) — proposition technique
 
-**Statut** : Proposée (pas encore actée — voir « Décision »)
-**Date** : 2026-09 (Sprint 6, exploration backlog)
-**Sprint** : candidat pour Sprint 7/8, pas le Sprint 6 en cours (infra/STRIDE)
+**Statut** : **Acceptée pour le scope AWS** (implémentée le 08/09/2026, Sprint 6) — le scope Azure (Entra ID) reste **Proposée**, non implémentée
+**Date** : 2026-09 (Sprint 6, exploration backlog → décision explicite de l'utilisateur d'implémenter dans la foulée, plutôt que d'attendre Sprint 7/8)
+**Sprint** : **6** pour le scope AWS (révisé — voir Décision), candidat Sprint 7/8 toujours valable pour le scope Azure si repris plus tard
 
 ## Contexte
 
@@ -116,10 +116,20 @@ Les deux providers de mot de passe périodique se substituent à une connection 
 
 ## Décision
 
-Aucune à ce stade — cette ADR reste **Proposée** et documente un chemin d'implémentation vérifié plutôt qu'une décision actée. Le passage à "Acceptée" (ou son abandon documenté) se fera quand ce chantier sera réellement planifié sur un sprint applicatif, pas pendant le Sprint 6 (infra/sécurité cloud) en cours.
+**Révisée le 08/09/2026** : l'utilisateur a explicitement demandé d'implémenter le scope AWS pendant le Sprint 6 plutôt que d'attendre un sprint applicatif — le thème (suppression d'une classe de secret statique) colle mieux à "sécurité cloud avancée" qu'à Angular (Sprint 7) ou microservices (Sprint 8), qui n'ont aucun lien naturel avec ce sujet. Le scope Azure (Entra ID) reste non implémenté : effort moyen, rien n'est posé côté infra Azure, pas de terrain aussi favorable que côté AWS (IAM DB auth déjà actif, rôle applicatif déjà vide et prêt).
 
-## Conséquences si implémentée plus tard
+**Implémenté pour AWS** — design conforme à la proposition technique ci-dessus, sans déviation :
+- Terraform (`modules/aws/ecs/main.tf`) : policy `rds-db:connect` sur le task role, scopée à `arkcloud_app` uniquement via le nouvel output `resource_id` de `modules/aws/rds`.
+- SQL : `GRANT rds_iam TO arkcloud_app` ajouté à `_set_secret_app_role` dans `modules/aws/secret-rotation/lambda/rotate.py` — réutilise le mécanisme de bootstrap idempotent déjà en place (Sprint 6, task #74/75) plutôt qu'un script séparé, cohérent avec le commentaire déjà présent dans ce fichier sur le "cheap self-heal".
+- C# (`InfrastructureServiceRegistration.cs`) : nouveau chemin `Database:AuthMode=AwsIam` avec `NpgsqlDataSourceBuilder.UsePeriodicPasswordProvider` + `RDSAuthTokenGenerator.GenerateAuthToken` (signature vérifiée contre le code source réel d'`aws-sdk-net`, pas supposée). Le chemin par défaut (`ConnectionStrings:DefaultConnection` passé directement à `UseNpgsql(string)`) reste **strictement inchangé** — pas de construction de `NpgsqlDataSource` en dehors du cas AWS IAM, pour ne rien risquer côté Azure/tests d'intégration/dev local.
+- `environments/dev/main.tf` (`aws_ecs_service_api`) : `Database__AuthMode=AwsIam` + `Database__Host/Port/Name/Username` ajoutés à l'environnement du service. Le secret `ConnectionStrings__DefaultConnection` reste injecté (coexistence assumée), même si l'app ne le lit plus tant que `Database__AuthMode` est positionné — un rollback vers l'auth par mot de passe redevient un simple retrait de variable d'environnement.
 
-**Positives** — plus de mot de passe applicatif à faire tourner ni à exposer dans Secrets Manager/Key Vault pour `arkcloud_app` ; supprime une classe entière de risque (secret statique volé/leaké) plutôt que de la mitiger par rotation périodique.
+**Pas fait dans ce lot, à vérifier avant un `apply` réel** : le package NuGet `AWSSDK.RDS` a été ajouté au `.csproj` mais pas restauré/compilé dans cette session (pas d'accès `dotnet build` avec les vraies dépendances ici) ; le zip du Lambda de rotation (`modules/aws/secret-rotation/lambda/build/rotate.zip`) n'a pas été reconstruit avec le nouveau `GRANT rds_iam` — nécessite de relancer `build.sh` puis de redéployer, comme pour toute modification de `rotate.py`.
 
-**Négatives / compromis** — dépendance plus forte à la disponibilité du service d'identité (IAM/Entra ID) pour toute nouvelle connexion DB ; complexité de test légèrement supérieure (mock du provider de token en local/CI) ; asymétrie transitoire pendant que `password_auth_enabled` reste `true` sur les deux clouds.
+## Conséquences
+
+**Positives** — plus de mot de passe applicatif à faire tourner ni à exposer dans Secrets Manager pour `arkcloud_app` côté AWS ; supprime une classe entière de risque (secret statique volé/leaké, l'incident réel de ce projet — tfstate exposé, task #87) plutôt que de la mitiger par rotation périodique. Désamorce en partie la procédure Kudu jamais implémentée (#83, backlog) : le seul rôle qui en avait besoin côté rotation applicative n'a plus de mot de passe à faire tourner une fois validé en conditions réelles.
+
+**Négatives / compromis** — dépendance plus forte à la disponibilité d'IAM STS pour toute nouvelle connexion DB (si IAM STS est indisponible, l'appli ne peut plus se reconnecter, alors qu'un mot de passe statique continuerait de fonctionner) ; complexité de test légèrement supérieure en théorie, mais neutralisée en pratique ici puisque `ArkCloudApiFactory.cs` remplace entièrement l'enregistrement du `DbContext` par un container Testcontainers avant que le chemin AWS IAM ne s'exécute ; asymétrie transitoire pendant que `password_auth_enabled` reste `true` en parallèle côté AWS, et que le scope Azure n'a toujours aucune implémentation.
+
+**Ce qui reste ouvert** — validation en conditions réelles (apply + déploiement Lambda + test de connexion) non faite dans cette session, à faire par l'utilisateur ; scope Azure (Entra ID) toujours à l'état de proposition, sans date.
