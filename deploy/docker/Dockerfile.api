@@ -9,6 +9,15 @@ RUN dotnet publish backend/ArkCloud.API/ArkCloud.API.csproj -c Release -o /app/p
 FROM mcr.microsoft.com/dotnet/aspnet:10.0 AS runtime
 WORKDIR /app
 
+# Backlog #102 (zéro-coût, "images distroless") -- exception documentée le 13/09/2026 : cette
+# image reste volontairement sur l'aspnet standard (pas de variante -chiseled/distroless), décision
+# utilisateur explicite. Une image distroless n'a par définition ni shell ni apt -- or le sshd
+# custom + postgresql-client installés juste en dessous SONT le mécanisme Kudu utilisé toute la
+# session du 12-13/09/2026 pour la rotation arkcloud_app et l'exécution de migrations.sql (voir
+# docs/runbooks/bootstrap-arkcloud-app-azure-entra-id.md et rotate-arkcloud-app-azure-kudu.md).
+# Basculer cette image casserait ces runbooks. Dockerfile.blazor, qui n'a aucun besoin de shell en
+# runtime, est passé sur -chiseled à la place -- voir son commentaire.
+#
 # Sprint 6 -- ADR-0010 (rotation arkcloud_app via Kudu). Pour un conteneur Linux custom, la
 # console Kudu (SSH) d'App Service n'est PAS disponible par defaut -- l'image doit embarquer et
 # demarrer elle-meme sshd sur le port 2222, pattern documente par Microsoft pour les "custom

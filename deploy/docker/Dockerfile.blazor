@@ -6,7 +6,12 @@ COPY . .
 RUN dotnet restore frontend/ArkCloud.Blazor/ArkCloud.Blazor.csproj
 RUN dotnet publish frontend/ArkCloud.Blazor/ArkCloud.Blazor.csproj -c Release -o /app/publish
 
-FROM mcr.microsoft.com/dotnet/aspnet:10.0 AS runtime
+# Sprint 6 clôture (#102, item "images distroless") -- variante -chiseled : base Ubuntu Chiseled
+# de Microsoft, sans shell ni gestionnaire de paquets (pas de /bin/sh, pas d'apt) -- distroless de
+# fait. Sûr ici car Blazor n'a besoin d'aucun accès shell en runtime (contrairement à
+# Dockerfile.api, qui reste volontairement sur l'image aspnet non-chiseled -- voir son commentaire
+# pour le détail du conflit avec le sshd Kudu custom).
+FROM mcr.microsoft.com/dotnet/aspnet:10.0-noble-chiseled AS runtime
 WORKDIR /app
 
 COPY --from=build /app/publish .
