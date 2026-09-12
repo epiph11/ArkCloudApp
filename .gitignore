@@ -38,3 +38,6 @@ logs/
 ## EF Core
 *.db
 *.sqlite
+# Script généré ponctuellement via `dotnet ef migrations script` (Sprint 6, bootstrap Azure) —
+# dérivé des migrations déjà committées dans Persistence/Migrations/, aucune raison de le versionner.
+/migrations.sql

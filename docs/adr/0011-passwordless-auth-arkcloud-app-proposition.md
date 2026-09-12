@@ -1,6 +1,6 @@
 # ADR-0011 : Authentification passwordless pour `arkcloud_app` (IAM DB auth AWS / Entra ID Azure) — proposition technique
 
-**Statut** : **Acceptée pour le scope AWS** (implémentée le 08/09/2026, Sprint 6) — le scope Azure (Entra ID) reste **Proposée**, non implémentée
+**Statut** : **Acceptée et implémentée pour les deux scopes** — AWS (08/09/2026, Sprint 6) et Azure/Entra ID (12/09/2026, Sprint 6 clôture), les deux vérifiés en conditions réelles (login applicatif réel via le nouveau mode d'auth, pas juste un `terraform apply` propre). Voir `docs/runbooks/bootstrap-arkcloud-app-azure-entra-id.md` pour le détail opérationnel Azure, y compris les 3 bugs réels rencontrés (aucun lié à Entra ID lui-même : conflit de version NuGet, migrations EF jamais appliquées sur cette base, default privileges scopés par rôle créateur).
 **Date** : 2026-09 (Sprint 6, exploration backlog → décision explicite de l'utilisateur d'implémenter dans la foulée, plutôt que d'attendre Sprint 7/8)
 **Sprint** : **6** pour le scope AWS (révisé — voir Décision), candidat Sprint 7/8 toujours valable pour le scope Azure si repris plus tard
 
