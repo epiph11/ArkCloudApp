@@ -21,4 +21,14 @@ public interface ICustomerRepository
 
     /// <summary>Batch lookup, e.g. to enrich a page of Orders with customer names in one round trip.</summary>
     Task<List<Customer>> GetByIdsAsync(IEnumerable<Guid> ids, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Customers eligible for the RGPD automated retention purge (docs/rgpd-classification-donnees.md
+    /// §2/§5 — threshold decided with the user: <paramref name="cutoffDate"/> years of inactivity).
+    /// A customer is eligible when their most recent order predates the cutoff, or — if they have
+    /// no order at all — when the customer record itself predates the cutoff. Already-anonymized
+    /// customers (see Customer.Anonymize()) are excluded so a scheduled job calling this
+    /// repeatedly stays idempotent instead of reprocessing the same rows forever.
+    /// </summary>
+    Task<List<Customer>> GetEligibleForRetentionPurgeAsync(DateTime cutoffDate, CancellationToken cancellationToken = default);
 }

@@ -49,4 +49,22 @@ public class Customer : BaseEntity
         Email = email;
         Address = address;
     }
+
+    /// <summary>
+    /// GDPR erasure when the row itself cannot be deleted: this customer has at least one
+    /// order, and those orders are retained under the legal-obligation exception (RGPD art.
+    /// 17(3)(b) — accounting/tax retention), which means orders.customer_id must keep pointing
+    /// at a real row. Strips every personal field instead, using a deterministic-but-unique
+    /// placeholder email per instance so the Email/uniqueness invariants stay satisfied
+    /// (Email.Create still requires a value containing '@'). Idempotent: anonymizing an
+    /// already-anonymized customer is a harmless no-op, not an error.
+    /// See docs/rgpd-classification-donnees.md §3.
+    /// </summary>
+    public void Anonymize()
+    {
+        FirstName = "Anonymized";
+        LastName = "Anonymized";
+        Email = Email.Create($"anonymized+{Id:N}@arkcloud.invalid");
+        Address = Address.Create("Anonymized", "Anonymized", "Anonymized");
+    }
 }

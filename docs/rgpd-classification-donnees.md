@@ -18,7 +18,7 @@ Deux entités portent des données à caractère personnel ; une troisième (`Or
 
 Aucune donnée de santé, biométrique, ou autre catégorie « sensible » au sens RGPD (art. 9) n'est stockée — uniquement de l'identité et du contact.
 
-**Constat structurel** : `Order.CustomerId` est une simple colonne Guid, sans contrainte de clé étrangère configurée dans EF Core (`OrderConfiguration.cs` ne déclare aucun `HasOne(Customer)`). Conséquence directe pour l'effacement, voir §3.
+**Constat structurel, corrigé cette semaine** : `Order.CustomerId` était une simple colonne Guid, sans contrainte de clé étrangère configurée dans EF Core (`OrderConfiguration.cs` ne déclarait aucun `HasOne(Customer)`). Une contrainte FK (`ON DELETE RESTRICT`) a été ajoutée, et `CustomerAppService.DeleteAsync` anonymise désormais le client plutôt que de le supprimer si des commandes existent — voir §3.
 
 ## 2. Rétention
 
@@ -32,16 +32,19 @@ Aucune donnée de santé, biométrique, ou autre catégorie « sensible » au se
 | CloudTrail (AWS, audit infra) | `modules/aws/cloudtrail` | 90 jours | Journal d'accès infra, pas de données client. |
 | Flow logs réseau (Azure NSG) | `modules/azure/flow-logs` | 90 jours | Adresses IP source/destination — donnée à caractère personnel au sens large (RGPD), mais fenêtre déjà alignée sur la recommandation Checkov `CKV_AZURE_12`, pas un chantier ce sprint. |
 
-**Purge automatisée** : aucune n'existe au-delà de l'expiration technique des logs/backups ci-dessus. Il n'y a pas de job qui purge une donnée personnelle *avant* sa rétention technique par catégorie métier (ex. « supprimer les clients inactifs depuis 3 ans ») — ce chantier n'est pas commencé, voir §5.
+**Purge automatisée — décidée et implémentée cette semaine** (ADR-0012) : seuil de 3 ans d'inactivité (date de la dernière commande, ou date de création du compte à défaut de commande), action = anonymisation (jamais suppression physique). Mécanisme volontairement asymétrique par cloud (Azure : `BackgroundService` in-process dans `ArkCloud.API` ; AWS : Lambda planifiée `modules/aws/gdpr-purge`) — voir ADR-0012 pour le détail complet, y compris la contrainte réseau côté Azure identique à celle déjà documentée par ADR-0010.
 
 ## 3. Droit à l'effacement
 
-Un chemin d'effacement réel existe : `CustomerAppService.DeleteAsync` → suppression physique (hard delete) de la ligne `Customer`, pas de soft-delete, pas de flag `IsDeleted`.
+Un chemin d'effacement réel existe : `CustomerAppService.DeleteAsync`. Deux issues possibles, selon que le client a des commandes ou non (corrigé cette semaine — voir ci-dessous) :
 
-**Deux limites réelles, non déduites — vérifiées dans le code :**
+- **Pas de commande** : suppression physique (hard delete) de la ligne `Customer`, pas de soft-delete, pas de flag `IsDeleted`. Inchangé.
+- **Au moins une commande** : anonymisation (`Customer.Anonymize()`) plutôt que suppression — prénom, nom, email et adresse remplacés par des valeurs neutres, la ligne `Customer` survit. Décision : les commandes sont retenues sous l'exception d'obligation légale du RGPD (art. 17(3)(b), conservation comptable/fiscale), ce qui exige que `orders.CustomerId` continue de pointer sur une ligne réelle plutôt que de devenir orphelin.
 
-1. **Commandes orphelines.** Comme noté en §1, `Order.CustomerId` n'a pas de contrainte FK configurée. Supprimer un `Customer` qui a des commandes ne les supprime pas et ne l'empêche pas non plus (pas de `Restrict`) — les lignes `orders` survivent avec un `CustomerId` qui ne pointe plus sur rien. Ce n'est pas en soi une fuite de donnée personnelle (les champs restants — produits, montants, statut — ne sont pas nominatifs), mais ce n'est pas un effacement propre non plus : c'est un id orphelin, pas une décision de conservation assumée.
-2. **Fenêtre de backup.** Une suppression n'efface pas rétroactivement les backups déjà pris — la donnée reste récupérable pendant la fenêtre de rétention (jusqu'à 7 jours côté Azure, 1 jour côté AWS, §2). C'est un délai normal et généralement accepté sous RGPD (l'essentiel est que la donnée ne survive pas indéfiniment dans les backups), mais ça doit être documenté comme un fait plutôt que supposé instantané si jamais une demande d'effacement formelle arrive.
+**Une limite corrigée cette semaine, une limite réelle qui demeure :**
+
+1. **Commandes orphelines — corrigé.** Comme noté en §1, `Order.CustomerId` n'avait pas de contrainte FK configurée : supprimer un `Customer` qui a des commandes ne les supprimait pas et ne l'empêchait pas non plus (pas de `Restrict`) — les lignes `orders` survivaient avec un `CustomerId` qui ne pointait plus sur rien. Corrigé par la contrainte FK (`ON DELETE RESTRICT`, migration `AddOrdersCustomerForeignKey`) et par la bascule anonymisation ci-dessus, qui rend ce cas impossible en usage normal — la contrainte reste comme garde-fou pour tout appelant qui contournerait `CustomerAppService`.
+2. **Fenêtre de backup.** Une suppression (ou anonymisation) n'efface pas rétroactivement les backups déjà pris — la donnée reste récupérable pendant la fenêtre de rétention (jusqu'à 7 jours côté Azure, 1 jour côté AWS, §2). C'est un délai normal et généralement accepté sous RGPD (l'essentiel est que la donnée ne survive pas indéfiniment dans les backups), mais ça doit être documenté comme un fait plutôt que supposé instantané si jamais une demande d'effacement formelle arrive.
 
 **Logs** : avant la correction de ce sprint (§4), une demande d'effacement ne touchait de toute façon pas les logs applicatifs, puisque l'email y était écrit en clair indépendamment de la ligne `Customer`/`User` en base. C'est corrigé, mais seulement pour les 8 points de log identifiés dans `AuthService` — voir §4 pour le périmètre exact.
 
@@ -74,11 +77,11 @@ Une clé gérée par le client (CMK/BYOK) n'est pas exigée par le RGPD en tant 
 
 ## Résumé — ce qui reste réellement ouvert
 
-**Corrigé ce sprint** : minimisation des logs d'authentification (§4).
+**Corrigé ce sprint** : minimisation des logs d'authentification (§4). **Corrigé cette semaine** : `Order.CustomerId` sans contrainte FK — décision prise et implémentée : les commandes sont conservées sous l'exception d'obligation légale du RGPD (art. 17(3)(b), conservation comptable/fiscale), donc un effacement `Customer` qui a des commandes anonymise la ligne (`Customer.Anonymize()` — prénom/nom/email/adresse remplacés, la ligne survit) plutôt que de la supprimer ; un `Customer` sans commande reste un vrai hard delete, inchangé. Contrainte FK ajoutée à l'échelle base (`ON DELETE RESTRICT`, migration `AddOrdersCustomerForeignKey`) en garde-fou, au cas où un futur appelant contournerait `CustomerAppService.DeleteAsync`. Voir §3 et `backend/ArkCloud.Application/Services/CustomerAppService.cs`.
+
+**Corrigé cette semaine (suite)** : purge automatisée par catégorie métier — voir ADR-0012. Seuil (3 ans), critère (dernière commande) et action (anonymisation) décidés avec l'utilisateur, pas figés unilatéralement dans le code. Implémentée en `CustomerRetentionPurgeHostedService`/`CustomerRetentionPurgeService` (Azure, in-process, vérifiée par build/tests le 12/09) et `modules/aws/gdpr-purge` (AWS, Lambda planifiée) — `terraform apply` exécuté le 12/09 des deux côtés, infrastructure provisionnée. Reste ouvert : aucune exécution réelle de la purge pas encore observée (pas de client réellement inactif depuis 3 ans en base dev à ce jour).
 
 **À traiter, aucune décision prise à ce jour** :
-- Purge automatisée par catégorie métier (au-delà de l'expiration technique des backups/logs) — non commencée.
-- `Order.CustomerId` sans contrainte FK — pas une fuite de PII, mais un effacement de `Customer` laisse un id orphelin plutôt qu'une décision assumée (supprimer, anonymiser, ou documenter la conservation des commandes).
 - Procédure d'effacement formelle (au sens : quelqu'un fait une demande RGPD réelle) jamais testée de bout en bout, y compris le délai de survie en backup (§3).
 
 **Acceptée / documentée, pas un chantier** :

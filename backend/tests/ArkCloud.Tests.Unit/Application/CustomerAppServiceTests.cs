@@ -13,12 +13,13 @@ namespace ArkCloud.Tests.Unit.Application;
 public class CustomerAppServiceTests
 {
     private readonly Mock<ICustomerRepository> _customerRepository = new();
+    private readonly Mock<IOrderRepository> _orderRepository = new();
     private readonly Mock<IUnitOfWork> _unitOfWork = new();
     private readonly CustomerAppService _sut;
 
     public CustomerAppServiceTests()
     {
-        _sut = new CustomerAppService(_customerRepository.Object, _unitOfWork.Object);
+        _sut = new CustomerAppService(_customerRepository.Object, _orderRepository.Object, _unitOfWork.Object);
     }
 
     [Fact]
@@ -103,7 +104,7 @@ public class CustomerAppServiceTests
     }
 
     [Fact]
-    public async Task DeleteAsync_Should_Remove_Customer_When_Found()
+    public async Task DeleteAsync_Should_Remove_Customer_When_No_Orders_Exist()
     {
         var customer = Customer.Create(
             "John", "Doe", Email.Create("john@example.com"), Address.Create("St", "Paris", "France"));
@@ -111,10 +112,40 @@ public class CustomerAppServiceTests
         _customerRepository
             .Setup(x => x.GetByIdAsync(customer.Id, It.IsAny<CancellationToken>()))
             .ReturnsAsync(customer);
+        _orderRepository
+            .Setup(x => x.ExistsForCustomerAsync(customer.Id, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(false);
 
         await _sut.DeleteAsync(customer.Id);
 
         _customerRepository.Verify(x => x.Remove(customer), Times.Once);
+        _unitOfWork.Verify(x => x.SaveChangesAsync(It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    /// <summary>
+    /// GDPR fix (docs/rgpd-classification-donnees.md §3): a customer with existing orders must
+    /// not be hard-deleted (it would leave orders.customer_id orphaned, and orders are retained
+    /// under the legal-obligation exception) — it must be anonymized in place instead.
+    /// </summary>
+    [Fact]
+    public async Task DeleteAsync_Should_Anonymize_Instead_Of_Remove_When_Orders_Exist()
+    {
+        var customer = Customer.Create(
+            "John", "Doe", Email.Create("john@example.com"), Address.Create("St", "Paris", "France"));
+
+        _customerRepository
+            .Setup(x => x.GetByIdAsync(customer.Id, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(customer);
+        _orderRepository
+            .Setup(x => x.ExistsForCustomerAsync(customer.Id, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(true);
+
+        await _sut.DeleteAsync(customer.Id);
+
+        _customerRepository.Verify(x => x.Remove(It.IsAny<Customer>()), Times.Never);
+        customer.FirstName.Should().Be("Anonymized");
+        customer.LastName.Should().Be("Anonymized");
+        customer.Email.Value.Should().Contain("anonymized+");
         _unitOfWork.Verify(x => x.SaveChangesAsync(It.IsAny<CancellationToken>()), Times.Once);
     }
 

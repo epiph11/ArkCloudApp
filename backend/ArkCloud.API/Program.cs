@@ -2,7 +2,9 @@ using System.Text;
 using System.Threading.RateLimiting;
 using Azure.Identity;
 using ArkCloud.API.Authorization;
+using ArkCloud.API.HostedServices;
 using ArkCloud.API.Middlewares;
+using ArkCloud.Application.Interfaces;
 using ArkCloud.Application.Services;
 using ArkCloud.Application.Validators;
 using ArkCloud.Domain.Common;
@@ -102,6 +104,31 @@ builder.Services.AddScoped<OrderAppService>();
 builder.Services.AddScoped<ProductAppService>();
 builder.Services.AddScoped<DashboardAppService>();
 builder.Services.AddScoped<AuthService>();
+
+// ---------------------------------------------------------------------------
+// RGPD retention purge (docs/rgpd-classification-donnees.md §2/§5, ADR-0012).
+// ---------------------------------------------------------------------------
+// RetentionYears defaults to 3 (the threshold decided with the user) so the service still has a
+// sane value even where this section is never configured (e.g. AWS, where the equivalent job is
+// the secret-rotation Lambda instead — see the hosted service's own doc comment below).
+var gdprRetentionYears = builder.Configuration.GetValue("Gdpr:CustomerRetentionYears", 3);
+builder.Services.AddScoped(sp => new CustomerRetentionPurgeService(
+    sp.GetRequiredService<ICustomerRepository>(),
+    sp.GetRequiredService<IUnitOfWork>(),
+    sp.GetRequiredService<ILogger<CustomerRetentionPurgeService>>())
+{
+    RetentionYears = gdprRetentionYears
+});
+
+// Opt-in, not automatic: only the Azure App Service (via an app setting Terraform sets on the
+// api app_service module) should ever run this in-process. On AWS the same job runs as a Lambda
+// inside the VPC instead (folded into modules/aws/secret-rotation) — see ADR-0012 for why the
+// mechanism has to differ between the two clouds. Defaults to false so a container that forgets
+// to set this explicitly does nothing, rather than silently starting a background sweep.
+if (builder.Configuration.GetValue("Gdpr:RunRetentionPurgeInProcess", false))
+{
+    builder.Services.AddHostedService<CustomerRetentionPurgeHostedService>();
+}
 
 // ---------------------------------------------------------------------------
 // Authentication (JWT bearer)

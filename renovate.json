@@ -1,0 +1,32 @@
+{
+  "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+  "extends": ["config:recommended"],
+  "timezone": "Europe/Paris",
+  "schedule": ["before 6am on monday"],
+  "labels": ["dependencies"],
+  "packageRules": [
+    {
+      "description": "Patch-level updates on NuGet/npm are auto-merged once CI is green — low blast radius, keeps the PR queue from piling up. Anything minor/major still needs a human look.",
+      "matchManagers": ["nuget", "npm"],
+      "matchUpdateTypes": ["patch"],
+      "automerge": true,
+      "automergeType": "pr",
+      "platformAutomerge": true
+    },
+    {
+      "description": "Group all Microsoft.EntityFrameworkCore.* / Npgsql.* packages into one PR instead of one per package — they're versioned together in practice and reviewing five near-identical PRs adds no signal.",
+      "matchManagers": ["nuget"],
+      "matchPackagePrefixes": ["Microsoft.EntityFrameworkCore", "Npgsql"],
+      "groupName": "EF Core / Npgsql"
+    },
+    {
+      "description": "Terraform provider/module bumps reviewed manually — a provider version bump can change resource behavior (see ArkCloudInfra's own azurerm zip_deploy_file bug, found via a real provider issue). Never auto-merge infrastructure.",
+      "matchManagers": ["terraform"],
+      "automerge": false
+    }
+  ],
+  "vulnerabilityAlerts": {
+    "labels": ["security"],
+    "automerge": false
+  }
+}

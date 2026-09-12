@@ -1,0 +1,17 @@
+# Sprint 6 -- ADR-0010 (rotation arkcloud_app via Kudu). Configuration standard recommandee par
+# Microsoft pour activer SSH dans un conteneur Linux custom App Service : port 2222 (App Service
+# tunnelise dessus via le proxy Kudu authentifie, jamais expose publiquement), authentification
+# par mot de passe (pas de gestion de cles dans ce scenario -- le canal est deja protege par
+# l'authentification Azure AD / publish credentials en amont du tunnel).
+Port                    2222
+ListenAddress           0.0.0.0
+LoginGraceTime          180
+X11Forwarding           yes
+Ciphers                 aes128-cbc,3des-cbc,aes256-cbc
+MACs                    hmac-sha1,hmac-sha1-96
+StrictModes             yes
+SyslogFacility          DAEMON
+PasswordAuthentication  yes
+PermitEmptyPasswords    no
+PermitRootLogin         yes
+Subsystem               sftp internal-sftp

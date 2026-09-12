@@ -21,4 +21,14 @@ public interface IOrderRepository
 
     /// <summary>Most recently created orders first, for Dashboard widgets.</summary>
     Task<List<Order>> GetLatestAsync(int count, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Whether at least one order references this customer. Used by the GDPR erasure path
+    /// (CustomerAppService.DeleteAsync) to decide between a hard delete (no orders — nothing
+    /// to keep for accounting purposes) and anonymization (orders exist — retained under the
+    /// legal-obligation exception, RGPD art. 17(3)(b), so the Customer row must survive with
+    /// its PII stripped rather than leave orders.CustomerId pointing at nothing).
+    /// See docs/rgpd-classification-donnees.md §3.
+    /// </summary>
+    Task<bool> ExistsForCustomerAsync(Guid customerId, CancellationToken cancellationToken = default);
 }

@@ -1,8 +1,8 @@
 # ADR-0005 : Architecture cible Azure/AWS — primaire + DR (warm standby), pas actif-actif
 
 **Statut** : Acceptée (cible ; migration non commencée)
-**Date** : 2026-08 (post-Sprint 5, rétro-documentée Sprint 6)
-**Sprint** : rattachement futur non numéroté — candidat Sprint 11 (TOGAF, Data Architecture)
+**Date** : 2026-08 (post-Sprint 5, rétro-documentée Sprint 6) — rattachement sprint précisé le 08/09/2026
+**Sprint** : réparti Sprints 12 et 13 (voir Décision et Conséquences) plutôt qu'un candidat unique Sprint 11 comme envisagé initialement
 
 ## Contexte
 
@@ -17,9 +17,9 @@ Depuis le Sprint 5, Azure et AWS sont deux copies parallèles complètes et ind�
 ## Décision
 
 Option 3 : primaire + DR, patron warm standby. Trois chantiers identifiés comme bloquants pour cette migration, non commencés à ce jour :
-1. Réplication logique PostgreSQL cross-cloud primaire→secondaire (le vrai point dur : la donnée, pas le compute).
-2. Couche DNS/health-check agnostique au-dessus des deux clouds (ni Traffic Manager ni Route 53 seuls ne supervisent nativement l'autre cloud).
-3. Unification de la clé de signature JWT entre Key Vault et Secrets Manager (sinon un token émis par un cloud devient invalide sur l'autre après bascule).
+1. Réplication logique PostgreSQL cross-cloud primaire→secondaire (le vrai point dur : la donnée, pas le compute). **Rattaché au Sprint 12** (Plateforme données & analytics, Step 16 decies du roadmap) — sujet donnée avant tout, cohérent avec le contenu déjà prévu là (Synapse Link, Data Lake).
+2. Couche DNS/health-check agnostique au-dessus des deux clouds (ni Traffic Manager ni Route 53 seuls ne supervisent nativement l'autre cloud). **Rattaché au Sprint 13** (Edge, réseau global & résilience multi-cloud, Step 16 undecies du roadmap) — Traffic Manager y est déjà prévu, c'est le même chantier.
+3. Unification de la clé de signature JWT entre Key Vault et Secrets Manager (sinon un token émis par un cloud devient invalide sur l'autre après bascule). **Reste un item indépendant, non rattaché à un sprint numéroté** — recoupe directement ADR-0004 (gestion de `Jwt:Key`) plutôt qu'un sujet infra/réseau ; à traiter comme extension de cette décision existante quand la bascule primaire→DR devient concrète.
 
 ## Conséquences
 
@@ -32,5 +32,6 @@ Option 3 : primaire + DR, patron warm standby. Trois chantiers identifiés comme
 - RTO/RPO ne peuvent être mesurés qu'une fois la réplication en place — jusque-là, tout chiffre serait théorique, pas expérimental (voir aussi le manque identifié en Step 16 septies : aucun drill de restauration n'a jamais été exécuté).
 
 **Ce que ça bloque ou impose pour la suite**
-- Pas de sprint numéroté attribué — candidat naturel pour le travail Data Architecture du Sprint 11 (TOGAF), qui prévoit déjà un Data Migration diagram Azure↔AWS.
+- Répartition précisée le 08/09/2026 : bloquants #1 et #2 rattachés respectivement aux Sprints 12 et 13 (backlog services Azure avancés, voir journal de décisions du roadmap) plutôt qu'à un unique candidat Sprint 11 comme envisagé initialement. Le Sprint 11 (TOGAF, Data Architecture) reste pertinent pour documenter formellement la cible une fois les trois chantiers avancés, mais n'est plus la seule porte d'entrée du sujet.
 - L'unification JWT (bloquant #3) recoupe directement ADR-0004 : `Jwt:Key` doit être résolu (au moins l'unification cross-cloud, sinon le support multi-clés) avant qu'une bascule primaire→DR soit utilisable sans déconnecter tous les utilisateurs.
+- Aucun des trois chantiers n'est encore planifié à une date précise — les Sprints 12/13 sont eux-mêmes en backlog, pas engagés.
