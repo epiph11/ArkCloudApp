@@ -6,6 +6,28 @@ Ce fichier démarre à `v0.1.0` (Sprint 6) — voir ADR-0009 (`docs/adr/0009-str
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-09-12
+
+Suite de clôture Sprint 6 : sécurisation de la chaîne de livraison (SBOM, signature d'images, analyse statique, scan de vulnérabilités, mises à jour automatisées de dépendances) et conformité RGPD (droit à l'effacement corrigé, purge automatisée).
+
+### Added
+- Rotation `arkcloud_app` sur Azure via Kudu SSH, vérifiée en conditions réelles (ADR-0010).
+- Authentification passwordless AWS (IAM DB auth) pour `arkcloud_app`, vérifiée en production ; volet Azure (Entra ID) resté à l'état de proposition (ADR-0011).
+- SBOM (Syft, format SPDX) généré sur le digest exact de chaque image poussée, signature Cosign keyless (OIDC GitHub) et attestation du SBOM — backend et frontend.
+- Purge RGPD automatisée des clients inactifs (3 ans, dernière commande, anonymisation) — mécanisme asymétrique par cloud : `BackgroundService` in-process côté Azure (`ArkCloud.API`), Lambda planifiée EventBridge côté AWS (`modules/aws/gdpr-purge`), déployée et vérifiée en Terraform (ADR-0012).
+- SonarCloud activé (analyse CI-based sur `arkcloud-backend-ci.yml`), vérifié sur un run réel.
+- Snyk activé (scan de dépendances .NET), vérifié sur un run réel ; scan d'image conteneur câblé, pas encore vérifié sur un build réel.
+- Renovate installé sur `ArkCloudApp` et `ArkCloudInfra` (patchs NuGet/npm auto-mergés, Terraform et alertes de vulnérabilité jamais auto-mergés).
+
+### Fixed
+- `orders.customer_id` sans contrainte de clé étrangère — commandes orphelines possibles après suppression d'un client. Contrainte FK (`ON DELETE RESTRICT`) ajoutée ; suppression d'un client avec commandes remplacée par une anonymisation plutôt qu'un hard delete, pour rester cohérent avec l'exception d'obligation légale du RGPD (art. 17(3)(b)).
+- Bug de pipeline : plusieurs `git push` avaient visé le mauvais dépôt (`ArkCloudApp` vs `ArkCloudInfra`), laissant un fix déjà écrit jamais réellement déployé malgré des `terraform apply` répétés côté infra.
+
+### Known issues
+- Procédure d'effacement RGPD formelle (demande réelle de bout en bout, y compris délai de survie en backup) jamais testée.
+- Premier job Renovate pas encore observé sur les deux repos (installation trop récente).
+- Zip de la Lambda `gdpr-purge` construit localement via un script PowerShell équivalent (`build.ps1`), faute de bash fonctionnel sur la machine — pas garanti octet-pour-octet identique au `build.sh` bash utilisé par la CI.
+
 ## [0.1.0] - 2026-08-26
 
 Premier tag du projet. `0.x` signifie explicitement : aucune garantie de stabilité ou de compatibilité, le projet est encore en construction active (voir ADR-0009).
