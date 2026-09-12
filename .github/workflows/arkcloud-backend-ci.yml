@@ -36,6 +36,11 @@ env:
   # pattern as the infracost job in ArkCloudInfra — every step guarded by this is skipped
   # entirely, no failure, until NDependLicense is actually set (see docs/infra-roadmap.md §18.2).
   NDEPEND_LICENSE: ${{ secrets.NDependLicense }}
+  # Same no-op-until-configured pattern for the two remaining Sprint 6 backlog tools
+  # (docs/infra-roadmap.md §18.1/§18.3) — free-tier SonarCloud and Snyk, neither wired to a
+  # real account yet. Nothing fails, nothing runs, until these secrets exist.
+  SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+  SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
 
 jobs:
   build-test:
@@ -57,6 +62,43 @@ jobs:
           dotnet restore backend/tests/ArkCloud.Tests.Integration/ArkCloud.Tests.Integration.csproj
           dotnet restore backend/tests/ArkCloud.Tests.Architecture/ArkCloud.Tests.Architecture.csproj
 
+      # Snyk (free tier, docs/infra-roadmap.md §18.3) — dependency scan (NuGet), complements
+      # Trivy (image scan, publish-image job below) rather than replacing it. No-op until
+      # SNYK_TOKEN exists (create a free account at snyk.io, then add the org's API token as
+      # this repo secret) — same pattern as NDepend/SonarCloud in this workflow.
+      - name: Snyk (dependencies)
+        if: env.SNYK_TOKEN != ''
+        uses: snyk/actions/dotnet@master
+        continue-on-error: true
+        env:
+          SNYK_TOKEN: ${{ env.SNYK_TOKEN }}
+        with:
+          args: --severity-threshold=high backend/ArkCloud.API/ArkCloud.API.csproj
+
+      # SonarCloud (free tier on a public repo, docs/infra-roadmap.md §18.1) — needs a Java
+      # runtime for the scanner CLI itself (unrelated to the .NET app being analyzed) and must
+      # wrap the actual build: `begin` before compiling, `end` after tests produce coverage/
+      # results, so the analysis can attribute findings to real build/test output rather than
+      # re-parsing source alone. No-op until SONAR_TOKEN + the two vars below exist (create a
+      # free SonarCloud org, then set SONAR_TOKEN as a secret and SONAR_ORGANIZATION/
+      # SONAR_PROJECT_KEY as repo variables).
+      - name: Setup Java (SonarCloud scanner)
+        if: env.SONAR_TOKEN != ''
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+
+      - name: SonarCloud — begin analysis
+        if: env.SONAR_TOKEN != ''
+        run: |
+          dotnet tool install --global dotnet-sonarscanner
+          dotnet-sonarscanner begin \
+            /k:"${{ vars.SONAR_PROJECT_KEY }}" \
+            /o:"${{ vars.SONAR_ORGANIZATION }}" \
+            /d:sonar.token="${{ env.SONAR_TOKEN }}" \
+            /d:sonar.host.url="https://sonarcloud.io"
+
       - name: Build
         run: |
           dotnet build backend/ArkCloud.API/ArkCloud.API.csproj --no-restore --configuration Release
@@ -77,6 +119,10 @@ jobs:
       - name: Fitness functions (architecture rules)
         run: |
           dotnet test backend/tests/ArkCloud.Tests.Architecture/ArkCloud.Tests.Architecture.csproj --no-build --configuration Release --logger trx --results-directory ./TestResults
+
+      - name: SonarCloud — end analysis
+        if: env.SONAR_TOKEN != ''
+        run: dotnet-sonarscanner end /d:sonar.token="${{ env.SONAR_TOKEN }}"
 
       - name: Upload test results
         if: always()
@@ -155,6 +201,20 @@ jobs:
           ignore-unfixed: true
           exit-code: "1"
 
+      # Snyk container scan — complements Trivy above rather than replacing it (docs/
+      # infra-roadmap.md §18.3). continue-on-error because Trivy is already the hard gate on
+      # this image; Snyk here is the free-tier second opinion, not a second blocking gate, until
+      # its findings have been triaged at least once. No-op until SNYK_TOKEN exists.
+      - name: Snyk (container image)
+        if: env.SNYK_TOKEN != ''
+        uses: snyk/actions/docker@master
+        continue-on-error: true
+        env:
+          SNYK_TOKEN: ${{ env.SNYK_TOKEN }}
+        with:
+          image: ${{ env.IMAGE_NAME }}:${{ github.sha }}
+          args: --severity-threshold=high --file=deploy/docker/Dockerfile.api
+
       - name: Log in to GHCR
         uses: docker/login-action@v3
         with:
@@ -174,6 +234,57 @@ jobs:
         run: |
           docker tag ${{ env.IMAGE_NAME }}:${{ env.ENV_TAG }} ${{ env.IMAGE_NAME }}:prod
           docker push ${{ env.IMAGE_NAME }}:prod
+
+      # Backlog item (docs/infra-roadmap.md §"Chaîne d'approvisionnement logicielle"): SBOM
+      # generated at every build + images signed. Resolves the digest just pushed (not the
+      # mutable :sha/:env tag) so the signature and SBOM attestation bind to the exact manifest
+      # that was actually pushed, not whatever a tag happens to point to later.
+      - name: Resolve pushed image digest
+        id: digest
+        run: |
+          DIGEST=$(docker inspect --format='{{index .RepoDigests 0}}' ${{ env.IMAGE_NAME }}:${{ github.sha }} | cut -d'@' -f2)
+          echo "digest=$DIGEST" >> "$GITHUB_OUTPUT"
+
+      # anchore/sbom-action wraps Syft — generates an SPDX SBOM straight from the pushed image
+      # (not the local build context), so it reflects what's actually in the registry.
+      - name: Generate SBOM (Syft)
+        uses: anchore/sbom-action@v0.17.9
+        with:
+          image: ${{ env.IMAGE_NAME }}@${{ steps.digest.outputs.digest }}
+          format: spdx-json
+          output-file: sbom-api.spdx.json
+
+      - name: Upload SBOM artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: sbom-api
+          path: sbom-api.spdx.json
+
+      - name: Install Cosign
+        uses: sigstore/cosign-installer@v3
+
+      # Keyless signing via GitHub's OIDC token (id-token: write, already granted above) —
+      # no signing key to generate, store, or rotate. Signs the digest, not a mutable tag.
+      # Verification once Sprint 9's admission control (OPA/Gatekeeper) lands:
+      #   cosign verify --certificate-identity-regexp "https://github.com/${{ github.repository }}/.*" \
+      #     --certificate-oidc-issuer https://token.actions.githubusercontent.com \
+      #     ${{ env.IMAGE_NAME }}@${{ steps.digest.outputs.digest }}
+      - name: Sign image (Cosign, keyless)
+        env:
+          COSIGN_EXPERIMENTAL: "1"
+        run: cosign sign --yes "${{ env.IMAGE_NAME }}@${{ steps.digest.outputs.digest }}"
+
+      # Attaches the SBOM as an in-toto attestation on the image itself, so a consumer can pull
+      # the signed SBOM back out of the registry (cosign verify-attestation) instead of trusting
+      # a same-run artifact upload.
+      - name: Attest SBOM (Cosign)
+        env:
+          COSIGN_EXPERIMENTAL: "1"
+        run: |
+          cosign attest --yes \
+            --predicate sbom-api.spdx.json \
+            --type spdxjson \
+            "${{ env.IMAGE_NAME }}@${{ steps.digest.outputs.digest }}"
 
       # --- AWS / ECR (task #38) ---
       # GHCR above serves Azure (App Service pulls straight from ghcr.io); ECS on AWS can only
