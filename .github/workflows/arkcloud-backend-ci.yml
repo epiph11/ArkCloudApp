@@ -29,7 +29,6 @@ permissions:
   contents: read
   packages: write
   id-token: write # required for the AWS OIDC login step below (publish-image job only)
-  pull-requests: write # NDepend action posts its quality-gate summary as a PR comment (see below)
 
 env:
   IMAGE_NAME: ghcr.io/${{ github.repository_owner }}/arkcloud-api
@@ -46,6 +45,13 @@ env:
 jobs:
   build-test:
     runs-on: ubuntu-latest
+    # Job-level override (SonarCloud flagged the workflow-level grant as too broad — least
+    # privilege, not a hard requirement, but a real finding: publish-image never needs this).
+    # Defining permissions: here replaces the workflow-level default for this job only; other
+    # jobs keep using the workflow-level block above.
+    permissions:
+      contents: read
+      pull-requests: write # NDepend action posts its quality-gate summary as a PR comment (see below)
 
     steps:
       - name: Checkout
