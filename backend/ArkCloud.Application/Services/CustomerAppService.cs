@@ -9,11 +9,16 @@ namespace ArkCloud.Application.Services;
 public class CustomerAppService
 {
     private readonly ICustomerRepository _customerRepository;
+    private readonly IOrderRepository _orderRepository;
     private readonly IUnitOfWork _unitOfWork;
 
-    public CustomerAppService(ICustomerRepository customerRepository, IUnitOfWork unitOfWork)
+    public CustomerAppService(
+        ICustomerRepository customerRepository,
+        IOrderRepository orderRepository,
+        IUnitOfWork unitOfWork)
     {
         _customerRepository = customerRepository;
+        _orderRepository = orderRepository;
         _unitOfWork = unitOfWork;
     }
 
@@ -79,12 +84,35 @@ public class CustomerAppService
         return ToResponse(customer);
     }
 
+    /// <summary>
+    /// GDPR erasure (RGPD art. 17). Two paths, chosen by whether this customer has orders —
+    /// see docs/rgpd-classification-donnees.md §3 for the finding this fixes (orders.customer_id
+    /// used to go orphan on delete, because no decision had been made between hard-deleting,
+    /// anonymizing, or documenting retention):
+    ///   - No orders: nothing needs to be kept for accounting purposes, so this is a genuine
+    ///     hard delete, same as before.
+    ///   - At least one order: those orders are retained under the legal-obligation exception
+    ///     (art. 17(3)(b) — accounting/tax retention), so the Customer row must keep existing
+    ///     for orders.customer_id to remain valid. The row is anonymized in place instead of
+    ///     deleted — this still satisfies the erasure request for every field that's actually
+    ///     personal data.
+    /// </summary>
     public async Task DeleteAsync(Guid id, CancellationToken cancellationToken = default)
     {
         var customer = await _customerRepository.GetByIdAsync(id, cancellationToken)
                        ?? throw new NotFoundException("Customer not found.");
 
-        _customerRepository.Remove(customer);
+        var hasOrders = await _orderRepository.ExistsForCustomerAsync(id, cancellationToken);
+
+        if (hasOrders)
+        {
+            customer.Anonymize();
+        }
+        else
+        {
+            _customerRepository.Remove(customer);
+        }
+
         await _unitOfWork.SaveChangesAsync(cancellationToken);
     }
 

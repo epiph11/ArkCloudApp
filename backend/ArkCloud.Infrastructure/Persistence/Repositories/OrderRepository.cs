@@ -79,4 +79,7 @@ public class OrderRepository : IOrderRepository
             .OrderByDescending(x => x.CreatedAt)
             .Take(count)
             .ToListAsync(cancellationToken);
+
+    public async Task<bool> ExistsForCustomerAsync(Guid customerId, CancellationToken cancellationToken = default)
+        => await _context.Orders.AnyAsync(x => x.CustomerId == customerId, cancellationToken);
 }

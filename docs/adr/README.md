@@ -18,6 +18,7 @@ Numérotation séquentielle, jamais réutilisée — une décision remplacée ob
 | [0009](0009-strategie-branches-et-versionning.md) | Stratégie de branches et de versionning (trunk-based, SemVer 0.x, Conventional Commits) | Acceptée |
 | [0010](0010-bootstrap-arkcloud-app-azure-kudu.md) | Bootstrap/rotation `arkcloud_app` sur Azure — Kudu manuel plutôt qu'automatisation dédiée | Acceptée |
 | [0011](0011-passwordless-auth-arkcloud-app-proposition.md) | Authentification passwordless pour `arkcloud_app` (IAM DB auth AWS / Entra ID Azure) | Proposée |
+| [0012](0012-purge-rgpd-automatisee-mecanisme-asymetrique.md) | Purge RGPD automatisée — seuil (3 ans), critère (dernière commande), action (anonymisation), mécanisme asymétrique par cloud | Acceptée et implémentée |
 
 *(0006 réservée — voir `docs/threat-model-stride.md`, la rotation `Jwt:Key` est couverte par l'ADR-0004 plutôt que dupliquée dans une ADR séparée ; le numéro reste sauté plutôt que réattribué, pour ne jamais faire porter à un même numéro deux décisions différentes selon quand on lit ce repo.)*
 
