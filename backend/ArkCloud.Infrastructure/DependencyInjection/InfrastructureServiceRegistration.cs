@@ -4,6 +4,8 @@ using ArkCloud.Application.Interfaces;
 using ArkCloud.Infrastructure.Authentication;
 using ArkCloud.Infrastructure.Persistence;
 using ArkCloud.Infrastructure.Persistence.Repositories;
+using Azure.Core;
+using Azure.Identity;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
@@ -47,13 +49,27 @@ public static class InfrastructureServiceRegistration
     private static void ConfigureNpgsql(DbContextOptionsBuilder options, IConfiguration configuration)
     {
         var authMode = configuration["Database:AuthMode"];
-        if (!string.Equals(authMode, "AwsIam", StringComparison.OrdinalIgnoreCase))
+
+        if (string.Equals(authMode, "AwsIam", StringComparison.OrdinalIgnoreCase))
         {
-            options.UseNpgsql(configuration.GetConnectionString("DefaultConnection"));
+            options.UseNpgsql(BuildAwsIamDataSource(configuration));
             return;
         }
 
-        options.UseNpgsql(BuildAwsIamDataSource(configuration));
+        // Sprint 6 clôture (12/09) — passwordless Azure (ADR-0011, scope Azure, complète le
+        // pendant AWS ci-dessus). Database:AuthMode=AzureAd bascule sur un token Entra ID
+        // (durée de vie ~60-90 min côté Azure AD, rafraîchi ici toutes les ~10 min par marge de
+        // sécurité, même logique que le token IAM RDS au-dessus) au lieu de la connection string
+        // statique. Même garde : absent/autre valeur => chemin ConnectionStrings:DefaultConnection
+        // strictement inchangé, aucun NpgsqlDataSourceBuilder(...).Build() eager en dehors du seul
+        // mode qui en a besoin.
+        if (string.Equals(authMode, "AzureAd", StringComparison.OrdinalIgnoreCase))
+        {
+            options.UseNpgsql(BuildAzureAdDataSource(configuration));
+            return;
+        }
+
+        options.UseNpgsql(configuration.GetConnectionString("DefaultConnection"));
     }
 
     private static NpgsqlDataSource BuildAwsIamDataSource(IConfiguration configuration)
@@ -87,6 +103,51 @@ public static class InfrastructureServiceRegistration
         builder.UsePeriodicPasswordProvider(
             passwordProvider: (_, _) =>
                 new ValueTask<string>(RDSAuthTokenGenerator.GenerateAuthToken(regionEndpoint, host, port, username)),
+            successRefreshInterval: TimeSpan.FromMinutes(10),
+            failureRefreshInterval: TimeSpan.FromSeconds(5));
+
+        return builder.Build();
+    }
+
+    // Scope OSS RDBMS fixe documenté par Microsoft pour Postgres/MySQL Flexible Server — pas de
+    // variante par ressource comme les scopes ARM classiques (".default" sur une audience de
+    // service, pas sur une resource ID précise).
+    private static readonly string[] AzurePostgresTokenScopes = ["https://ossrdbms-aad.database.windows.net/.default"];
+
+    private static NpgsqlDataSource BuildAzureAdDataSource(IConfiguration configuration)
+    {
+        var host = configuration["Database:Host"]
+            ?? throw new InvalidOperationException("Database:Host est requis quand Database:AuthMode=AzureAd.");
+        var port = int.Parse(configuration["Database:Port"] ?? "5432");
+        var database = configuration["Database:Name"]
+            ?? throw new InvalidOperationException("Database:Name est requis quand Database:AuthMode=AzureAd.");
+        // Doit être exactement le nom de rôle Postgres créé par pgaadauth_create_principal côté
+        // serveur (voir modules/azure/postgresql/main.tf et
+        // docs/runbooks/bootstrap-arkcloud-app-azure-entra-id.md) — PAS l'Object ID de l'identité
+        // managée. Azure AD auth sur Flexible Server authentifie par ce nom de rôle + le token
+        // porté comme mot de passe, la correspondance nom↔identité est faite côté serveur au
+        // moment de la création du principal, pas à la connexion.
+        var username = configuration["Database:Username"]
+            ?? throw new InvalidOperationException("Database:Username est requis quand Database:AuthMode=AzureAd.");
+
+        var builder = new NpgsqlDataSourceBuilder(
+            $"Host={host};Port={port};Database={database};Username={username};Ssl Mode=Require");
+
+        // DefaultAzureCredential — Managed Identity en environnement Azure réel (App Service,
+        // system-assigned, même identité que celle déjà utilisée pour Key Vault dans ce projet),
+        // retombe sur Azure CLI / Visual Studio en local si jamais quelqu'un doit tester ce chemin
+        // hors App Service. Aucun credential stocké, même logique que le chemin Key Vault existant
+        // (Program.cs, ArkCloud.API).
+        var credential = new DefaultAzureCredential();
+
+        builder.UsePeriodicPasswordProvider(
+            passwordProvider: async (_, cancellationToken) =>
+            {
+                var token = await credential.GetTokenAsync(
+                    new TokenRequestContext(AzurePostgresTokenScopes),
+                    cancellationToken);
+                return token.Token;
+            },
             successRefreshInterval: TimeSpan.FromMinutes(10),
             failureRefreshInterval: TimeSpan.FromSeconds(5));
 

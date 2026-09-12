@@ -28,6 +28,13 @@
          par Snyk sur la PR de clôture Sprint 6, corrigée à partir de 4.0.3.3. -->
     <PackageReference Include="AWSSDK.Core" Version="4.0.3.3" />
 
+    <!-- Sprint 6 clôture — passwordless Azure (ADR-0011, scope Azure) : DefaultAzureCredential
+         génère un token Entra ID localement (Managed Identity en prod, mêmes credentials que le
+         chemin Key Vault déjà utilisé côté ArkCloud.API), utilisé uniquement quand
+         Database:AuthMode=AzureAd. Contrepartie exacte de AWSSDK.RDS/AWSSDK.Core au-dessus pour
+         AwsIam. -->
+    <PackageReference Include="Azure.Identity" Version="1.14.2" />
+
     <!-- Authentication: JWT generation + password hashing. -->
     <PackageReference Include="Microsoft.Extensions.Identity.Core" Version="10.0.9" />
     <PackageReference Include="Microsoft.IdentityModel.Tokens" Version="8.14.0" />
