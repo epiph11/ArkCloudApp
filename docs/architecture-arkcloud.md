@@ -262,4 +262,4 @@ Rappel d'échéance automatisé : `.github/workflows/secret-expiry-check.yml`, t
 
 ## 10. Prochaines étapes
 
-Sprint 6 est formellement clos (12/09) : PR `develop` → `main` mergée (après correction de 3 findings réels remontés par la CI de vérification elle-même — CVE `AWSSDK.Core`, permission GitHub Actions trop large repérée par SonarCloud, deux faux positifs GitGuardian sur des identifiants de test documentés), tag `v0.2.0` posé sur `main` et poussé. `CHANGELOG.md` à jour. Sprint 7 (Angular enterprise) est le prochain jalon du roadmap. Sprint 7 (Angular enterprise) est le prochain jalon majeur du roadmap.
+Sprint 6 est désormais clos côté implémentation — l'apply Terraform AWS pour la purge RGPD est fait, SonarCloud et Snyk sont activés et vérifiés en CI réelle, Renovate est installé. Ce qui reste (merge `develop` → `main` + tag SemVer) est une action de clôture ponctuelle, plus un chantier de conception. Sprint 7 (Angular enterprise) est le prochain jalon majeur du roadmap.

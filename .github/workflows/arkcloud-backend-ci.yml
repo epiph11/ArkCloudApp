@@ -1,0 +1,347 @@
+name: arkcloud-backend-ci
+
+on:
+  push:
+    branches: [main, staging, develop]
+    # v* tags are what actually ship a production release (see publish-image below) —
+    # note GitHub does not apply the paths filter to tag pushes, so a version tag always
+    # runs this workflow in full regardless of what changed.
+    tags: ["v*"]
+    paths:
+      - "backend/**"
+      - "deploy/docker/Dockerfile.api"
+      - "deploy/docker/sshd_config"
+      - "deploy/docker/start-api.sh"
+      - ".github/workflows/arkcloud-backend-ci.yml"
+  pull_request:
+    branches: [main, staging, develop]
+    paths:
+      - "backend/**"
+      - "deploy/docker/Dockerfile.api"
+      - "deploy/docker/sshd_config"
+      - "deploy/docker/start-api.sh"
+      - ".github/workflows/arkcloud-backend-ci.yml"
+  # Manual trigger — not subject to the paths filters above, useful for retesting
+  # publish-image (e.g. AWS OIDC/ECR changes) without needing an unrelated file edit.
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  packages: write
+  id-token: write # required for the AWS OIDC login step below (publish-image job only)
+
+env:
+  IMAGE_NAME: ghcr.io/${{ github.repository_owner }}/arkcloud-api
+  # NDepend GitHub Action trial (Sprint 6, backlog item). Same "no-op until the secret exists"
+  # pattern as the infracost job in ArkCloudInfra — every step guarded by this is skipped
+  # entirely, no failure, until NDependLicense is actually set (see docs/infra-roadmap.md §18.2).
+  NDEPEND_LICENSE: ${{ secrets.NDependLicense }}
+  # Same no-op-until-configured pattern for the two remaining Sprint 6 backlog tools
+  # (docs/infra-roadmap.md §18.1/§18.3) — free-tier SonarCloud and Snyk, neither wired to a
+  # real account yet. Nothing fails, nothing runs, until these secrets exist.
+  SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+  SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
+
+jobs:
+  build-test:
+    runs-on: ubuntu-latest
+    # Job-level override (SonarCloud flagged the workflow-level grant as too broad — least
+    # privilege, not a hard requirement, but a real finding: publish-image never needs this).
+    # Defining permissions: here replaces the workflow-level default for this job only; other
+    # jobs keep using the workflow-level block above.
+    permissions:
+      contents: read
+      pull-requests: write # NDepend action posts its quality-gate summary as a PR comment (see below)
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 10.0.x
+
+      - name: Restore
+        run: |
+          dotnet restore backend/ArkCloud.API/ArkCloud.API.csproj
+          dotnet restore backend/tests/ArkCloud.Tests.Unit/ArkCloud.Tests.Unit.csproj
+          dotnet restore backend/tests/ArkCloud.Tests.Integration/ArkCloud.Tests.Integration.csproj
+          dotnet restore backend/tests/ArkCloud.Tests.Architecture/ArkCloud.Tests.Architecture.csproj
+
+      # Snyk (free tier, docs/infra-roadmap.md §18.3) — dependency scan (NuGet), complements
+      # Trivy (image scan, publish-image job below) rather than replacing it. No-op until
+      # SNYK_TOKEN exists (create a free account at snyk.io, then add the org's API token as
+      # this repo secret) — same pattern as NDepend/SonarCloud in this workflow.
+      - name: Snyk (dependencies)
+        if: env.SNYK_TOKEN != ''
+        uses: snyk/actions/dotnet@master
+        continue-on-error: true
+        env:
+          SNYK_TOKEN: ${{ env.SNYK_TOKEN }}
+        with:
+          args: --severity-threshold=high backend/ArkCloud.API/ArkCloud.API.csproj
+
+      # SonarCloud (free tier on a public repo, docs/infra-roadmap.md §18.1) — needs a Java
+      # runtime for the scanner CLI itself (unrelated to the .NET app being analyzed) and must
+      # wrap the actual build: `begin` before compiling, `end` after tests produce coverage/
+      # results, so the analysis can attribute findings to real build/test output rather than
+      # re-parsing source alone. No-op until SONAR_TOKEN + the two vars below exist (create a
+      # free SonarCloud org, then set SONAR_TOKEN as a secret and SONAR_ORGANIZATION/
+      # SONAR_PROJECT_KEY as repo variables).
+      - name: Setup Java (SonarCloud scanner)
+        if: env.SONAR_TOKEN != ''
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+
+      - name: SonarCloud — begin analysis
+        if: env.SONAR_TOKEN != ''
+        run: |
+          dotnet tool install --global dotnet-sonarscanner
+          dotnet-sonarscanner begin \
+            /k:"${{ vars.SONAR_PROJECT_KEY }}" \
+            /o:"${{ vars.SONAR_ORGANIZATION }}" \
+            /d:sonar.token="${{ env.SONAR_TOKEN }}" \
+            /d:sonar.host.url="https://sonarcloud.io"
+
+      - name: Build
+        run: |
+          dotnet build backend/ArkCloud.API/ArkCloud.API.csproj --no-restore --configuration Release
+          dotnet build backend/tests/ArkCloud.Tests.Unit/ArkCloud.Tests.Unit.csproj --no-restore --configuration Release
+          dotnet build backend/tests/ArkCloud.Tests.Integration/ArkCloud.Tests.Integration.csproj --no-restore --configuration Release
+          dotnet build backend/tests/ArkCloud.Tests.Architecture/ArkCloud.Tests.Architecture.csproj --no-restore --configuration Release
+
+      - name: Test
+        run: |
+          dotnet test backend/tests/ArkCloud.Tests.Unit/ArkCloud.Tests.Unit.csproj --no-build --configuration Release --logger trx --results-directory ./TestResults
+          dotnet test backend/tests/ArkCloud.Tests.Integration/ArkCloud.Tests.Integration.csproj --no-build --configuration Release --logger trx --results-directory ./TestResults
+
+      # Sprint 6 fitness functions — fails the build if a commit breaks the Clean Architecture
+      # dependency direction (Domain/Application/Infrastructure/API) or leaks EF Core/ASP.NET
+      # Core into Domain/Application. Separate step (not folded into the Test step above) so a
+      # failure here is immediately legible as "architecture rule broken", not lost among unit/
+      # integration test output. See backend/tests/ArkCloud.Tests.Architecture/ArchitectureTests.cs.
+      - name: Fitness functions (architecture rules)
+        run: |
+          dotnet test backend/tests/ArkCloud.Tests.Architecture/ArkCloud.Tests.Architecture.csproj --no-build --configuration Release --logger trx --results-directory ./TestResults
+
+      - name: SonarCloud — end analysis
+        if: env.SONAR_TOKEN != ''
+        run: dotnet-sonarscanner end /d:sonar.token="${{ env.SONAR_TOKEN }}"
+
+      - name: Upload test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: backend-test-results
+          path: ./TestResults
+
+      # NDepend trial (28-day GitHub Action trial, Sprint 6 backlog — see docs/infra-roadmap.md
+      # §18.2). Complements ArchUnitNET rather than replacing it: ArchUnitNET is the continuous
+      # pass/fail gate on the exact rules already written; NDepend is the exploratory report
+      # (dependency graph, 100+ metrics, technical debt estimate) NDepend does better, per
+      # ADR-0007-style "diagnostic vs enforcement" split already documented for these two tools.
+      #
+      # Analyzes ArkCloud.sln, which also references the Blazor frontend project — not built in
+      # this job (that happens in arkcloud-frontend-ci.yml). Confirmed tolerant of that missing
+      # assembly (logs a Warning, not a failure).
+      #
+      # First real PR run (12/09) surfaced two things:
+      #   1. The action crashed posting its PR summary comment (`403 Resource not accessible by
+      #      integration`) — `pull-requests: write` wasn't granted above; added.
+      #   2. Its own quality gate ("Critical Rules Violated" > 0) failed on 2 pre-existing High
+      #      findings, unrelated to this PR's changes — not investigated/fixed yet (trial license,
+      #      28-day exploratory tool per the split documented above, not a hard gate like
+      #      ArchUnitNET). continue-on-error so a trial-tool finding never blocks the Required
+      #      build-test check; the findings still show up in the PR comment/artifact for review.
+      - name: NDepend (trial)
+        if: env.NDEPEND_LICENSE != ''
+        uses: ndepend/ndepend-action@v2
+        continue-on-error: true
+        with:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          license: ${{ secrets.NDependLicense }}
+
+      - name: Publish API
+        run: dotnet publish backend/ArkCloud.API/ArkCloud.API.csproj -c Release -o ./publish
+
+  # Only runs on push (never on PRs), and only after build-test passes.
+  #
+  # A plain push to `main` does NOT publish an image — main is where staging gets merged
+  # once validated, but a production release is a deliberate act: push a `vX.Y.Z` tag (see
+  # docs/versioning, or just `git tag vX.Y.Z && git push origin vX.Y.Z` from main once merged).
+  # develop and staging pushes still publish work-in-progress images for their own environments.
+  publish-image:
+    needs: build-test
+    if: >-
+      (github.event_name == 'push' &&
+       (startsWith(github.ref, 'refs/tags/v') || github.ref_name == 'staging' || github.ref_name == 'develop')) ||
+      github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    # Requires "development", "staging" and "production" Environments configured in
+    # Settings > Environments. Add required reviewers on "production" there to get a
+    # manual approval gate before any vX.Y.Z tag actually gets pushed to the registry —
+    # no workflow change needed to turn that on.
+    environment: ${{ startsWith(github.ref, 'refs/tags/v') && 'production' || github.ref_name == 'staging' && 'staging' || 'development' }}
+    env:
+      # Tag pushes (vX.Y.Z) publish under the version itself; branch pushes publish under
+      # a floating tag for that environment.
+      ENV_TAG: ${{ startsWith(github.ref, 'refs/tags/v') && github.ref_name || github.ref_name == 'staging' && 'staging' || 'dev' }}
+      # Same three-way split, but matching ArkCloudInfra's environments/{dev,staging,prod}
+      # folder names exactly (ENV_TAG uses "development"/version-string, not the same values).
+      TF_ENVIRONMENT: ${{ startsWith(github.ref, 'refs/tags/v') && 'prod' || github.ref_name == 'staging' && 'staging' || 'dev' }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Build Docker image
+        run: docker build -f deploy/docker/Dockerfile.api -t ${{ env.IMAGE_NAME }}:${{ github.sha }} -t ${{ env.IMAGE_NAME }}:${{ env.ENV_TAG }} .
+        # Note (Sprint 6, tache #83) : ce Dockerfile depend aussi de deploy/docker/sshd_config et
+        # deploy/docker/start-api.sh (COPY). Le filtre `paths` du declencheur `push` ci-dessus doit
+        # couvrir les trois fichiers, pas juste ce Dockerfile -- sinon un changement dans l'un des
+        # deux autres ne redeclenche pas ce build (bug reel rencontre lors de l'ajout de sshd :
+        # le premier commit touchant seulement deploy/docker/** n'a declenche AUCUN run CI).
+
+      # Scans the image just built, before it ever reaches the registry. exit-code: '1' makes
+      # this step (and therefore the job) fail on any CRITICAL/HIGH finding that has a known
+      # fix — ignore-unfixed avoids blocking on base-image CVEs nobody can patch yet.
+      - name: Scan image with Trivy
+        uses: aquasecurity/trivy-action@v0.36.0
+        with:
+          image-ref: ${{ env.IMAGE_NAME }}:${{ github.sha }}
+          format: table
+          severity: CRITICAL,HIGH
+          ignore-unfixed: true
+          exit-code: "1"
+
+      # Snyk container scan — complements Trivy above rather than replacing it (docs/
+      # infra-roadmap.md §18.3). continue-on-error because Trivy is already the hard gate on
+      # this image; Snyk here is the free-tier second opinion, not a second blocking gate, until
+      # its findings have been triaged at least once. No-op until SNYK_TOKEN exists.
+      - name: Snyk (container image)
+        if: env.SNYK_TOKEN != ''
+        uses: snyk/actions/docker@master
+        continue-on-error: true
+        env:
+          SNYK_TOKEN: ${{ env.SNYK_TOKEN }}
+        with:
+          image: ${{ env.IMAGE_NAME }}:${{ github.sha }}
+          args: --severity-threshold=high --file=deploy/docker/Dockerfile.api
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Push Docker image
+        run: |
+          docker push ${{ env.IMAGE_NAME }}:${{ github.sha }}
+          docker push ${{ env.IMAGE_NAME }}:${{ env.ENV_TAG }}
+
+      # A version tag also moves the floating `:prod` tag, so "the current prod image" always
+      # has a stable name to reference without needing to know the latest version number.
+      - name: Update floating prod tag
+        if: startsWith(github.ref, 'refs/tags/v')
+        run: |
+          docker tag ${{ env.IMAGE_NAME }}:${{ env.ENV_TAG }} ${{ env.IMAGE_NAME }}:prod
+          docker push ${{ env.IMAGE_NAME }}:prod
+
+      # Backlog item (docs/infra-roadmap.md §"Chaîne d'approvisionnement logicielle"): SBOM
+      # generated at every build + images signed. Resolves the digest just pushed (not the
+      # mutable :sha/:env tag) so the signature and SBOM attestation bind to the exact manifest
+      # that was actually pushed, not whatever a tag happens to point to later.
+      - name: Resolve pushed image digest
+        id: digest
+        run: |
+          DIGEST=$(docker inspect --format='{{index .RepoDigests 0}}' ${{ env.IMAGE_NAME }}:${{ github.sha }} | cut -d'@' -f2)
+          echo "digest=$DIGEST" >> "$GITHUB_OUTPUT"
+
+      # anchore/sbom-action wraps Syft — generates an SPDX SBOM straight from the pushed image
+      # (not the local build context), so it reflects what's actually in the registry.
+      - name: Generate SBOM (Syft)
+        uses: anchore/sbom-action@v0.17.9
+        with:
+          image: ${{ env.IMAGE_NAME }}@${{ steps.digest.outputs.digest }}
+          format: spdx-json
+          output-file: sbom-api.spdx.json
+
+      - name: Upload SBOM artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: sbom-api
+          path: sbom-api.spdx.json
+
+      - name: Install Cosign
+        uses: sigstore/cosign-installer@v3
+
+      # Keyless signing via GitHub's OIDC token (id-token: write, already granted above) —
+      # no signing key to generate, store, or rotate. Signs the digest, not a mutable tag.
+      # Verification once Sprint 9's admission control (OPA/Gatekeeper) lands:
+      #   cosign verify --certificate-identity-regexp "https://github.com/${{ github.repository }}/.*" \
+      #     --certificate-oidc-issuer https://token.actions.githubusercontent.com \
+      #     ${{ env.IMAGE_NAME }}@${{ steps.digest.outputs.digest }}
+      - name: Sign image (Cosign, keyless)
+        env:
+          COSIGN_EXPERIMENTAL: "1"
+        run: cosign sign --yes "${{ env.IMAGE_NAME }}@${{ steps.digest.outputs.digest }}"
+
+      # Attaches the SBOM as an in-toto attestation on the image itself, so a consumer can pull
+      # the signed SBOM back out of the registry (cosign verify-attestation) instead of trusting
+      # a same-run artifact upload.
+      - name: Attest SBOM (Cosign)
+        env:
+          COSIGN_EXPERIMENTAL: "1"
+        run: |
+          cosign attest --yes \
+            --predicate sbom-api.spdx.json \
+            --type spdxjson \
+            "${{ env.IMAGE_NAME }}@${{ steps.digest.outputs.digest }}"
+
+      # --- AWS / ECR (task #38) ---
+      # GHCR above serves Azure (App Service pulls straight from ghcr.io); ECS on AWS can only
+      # pull from ECR (or a registry it's explicitly authenticated against), so the same image
+      # also needs pushing here — this is what actually lets the ECS services in Sprint 5's
+      # aws_ecs_service_api/web modules run something other than an empty task.
+      #
+      # Guarded to "dev" only: only environments/dev's aws_ecr module exists today (Sprint 5).
+      # staging/prod ECR repos land with Sprints 6-10 — drop this `if:` once those exist, the
+      # step itself needs no change (ECR_REPOSITORY already derives from TF_ENVIRONMENT).
+      - name: Configure AWS credentials
+        if: env.TF_ENVIRONMENT == 'dev'
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_APP_CI_ROLE_ARN }}
+          aws-region: eu-west-1
+
+      - name: Log in to ECR
+        if: env.TF_ENVIRONMENT == 'dev'
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Tag and push image to ECR
+        if: env.TF_ENVIRONMENT == 'dev'
+        env:
+          ECR_REGISTRY: ${{ vars.AWS_ACCOUNT_ID }}.dkr.ecr.eu-west-1.amazonaws.com
+          ECR_REPOSITORY: arkcloud-arkcloud-${{ env.TF_ENVIRONMENT }}/api
+        run: |
+          docker tag ${{ env.IMAGE_NAME }}:${{ github.sha }} $ECR_REGISTRY/$ECR_REPOSITORY:${{ github.sha }}
+          docker tag ${{ env.IMAGE_NAME }}:${{ env.ENV_TAG }} $ECR_REGISTRY/$ECR_REPOSITORY:${{ env.ENV_TAG }}
+          docker push $ECR_REGISTRY/$ECR_REPOSITORY:${{ github.sha }}
+          docker push $ECR_REGISTRY/$ECR_REPOSITORY:${{ env.ENV_TAG }}
+
+      # Notifies ArkCloudInfra that a new API image is ready — deploy-on-image.yml over there
+      # picks this up and runs a scoped `terraform apply -target=...` for just this app.
+      # INFRA_DISPATCH_TOKEN is a fine-grained PAT with Contents:write on ArkCloudInfra only —
+      # GITHUB_TOKEN can't be used here, it's scoped to this repo and can't dispatch to another.
+      - name: Notify ArkCloudInfra of new image
+        uses: peter-evans/repository-dispatch@v3
+        with:
+          token: ${{ secrets.INFRA_DISPATCH_TOKEN }}
+          repository: ${{ github.repository_owner }}/ArkCloudInfra
+          event-type: image-published
+          client-payload: >-
+            {"app": "api", "tag": "${{ env.ENV_TAG }}", "environment": "${{ env.TF_ENVIRONMENT }}"}
