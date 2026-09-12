@@ -1,0 +1,23 @@
+# Backlog #102 — étend la config par défaut de gitleaks (règles standard conservées) avec un
+# allowlist pour les faux positifs connus de ce repo. N'ajouter une entrée ici qu'après avoir
+# confirmé qu'il ne s'agit PAS d'un vrai secret — voir le commentaire de .pre-commit-config.yaml.
+
+[extend]
+useDefault = true
+
+[allowlist]
+description = "Faux positifs connus, confirmés non-sensibles"
+regexes = [
+  # deploy/docker/Dockerfile.api : mot de passe root du sshd custom embarqué dans l'image
+  # (ADR-0010, addendum 07/09/2026). Documenté comme non-secret dans le commentaire du Dockerfile :
+  # pattern officiel Microsoft pour "custom containers", port 2222 jamais exposé publiquement,
+  # atteignable uniquement via le tunnel authentifié scm.azurewebsites.net (Azure AD / publish
+  # credentials). Trivy le signale déjà en CI (publish-image) comme rappel, pas une découverte.
+  '''echo "root:Docker!" \| chpasswd''',
+]
+paths = [
+  # Migrations SQL générées localement (dotnet ef migrations script) — jamais commit de toute
+  # façon (voir .gitignore, /migrations.sql), gitleaks n'a rien à y scanner mais exclu par
+  # cohérence si jamais quelqu'un force-ajoute le fichier par erreur.
+  '''migrations\.sql''',
+]
