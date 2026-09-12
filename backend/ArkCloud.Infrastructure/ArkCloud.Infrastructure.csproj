@@ -23,6 +23,10 @@
          uniquement quand Database:AuthMode=AwsIam (voir InfrastructureServiceRegistration.cs) —
          sur Azure, le chemin ConnectionStrings:DefaultConnection existant reste inchangé. -->
     <PackageReference Include="AWSSDK.RDS" Version="4.0.10.1" />
+    <!-- Référence directe pour forcer la résolution NuGet au-dessus de la version amenée
+         transitivement par AWSSDK.RDS — CVE-2026-22611 (CWE-1286, medium, CVSS 6.3), trouvée
+         par Snyk sur la PR de clôture Sprint 6, corrigée à partir de 4.0.3.3. -->
+    <PackageReference Include="AWSSDK.Core" Version="4.0.3.3" />
 
     <!-- Authentication: JWT generation + password hashing. -->
     <PackageReference Include="Microsoft.Extensions.Identity.Core" Version="10.0.9" />

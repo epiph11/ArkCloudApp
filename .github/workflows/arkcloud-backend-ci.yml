@@ -29,6 +29,7 @@ permissions:
   contents: read
   packages: write
   id-token: write # required for the AWS OIDC login step below (publish-image job only)
+  pull-requests: write # NDepend action posts its quality-gate summary as a PR comment (see below)
 
 env:
   IMAGE_NAME: ghcr.io/${{ github.repository_owner }}/arkcloud-api
@@ -138,12 +139,21 @@ jobs:
       # ADR-0007-style "diagnostic vs enforcement" split already documented for these two tools.
       #
       # Analyzes ArkCloud.sln, which also references the Blazor frontend project — not built in
-      # this job (that happens in arkcloud-frontend-ci.yml). Not yet verified by a real run
-      # whether NDepend tolerates that missing assembly gracefully or needs the `solution`/
-      # `customconfig` parameter narrowed — first real trial run will tell.
+      # this job (that happens in arkcloud-frontend-ci.yml). Confirmed tolerant of that missing
+      # assembly (logs a Warning, not a failure).
+      #
+      # First real PR run (12/09) surfaced two things:
+      #   1. The action crashed posting its PR summary comment (`403 Resource not accessible by
+      #      integration`) — `pull-requests: write` wasn't granted above; added.
+      #   2. Its own quality gate ("Critical Rules Violated" > 0) failed on 2 pre-existing High
+      #      findings, unrelated to this PR's changes — not investigated/fixed yet (trial license,
+      #      28-day exploratory tool per the split documented above, not a hard gate like
+      #      ArchUnitNET). continue-on-error so a trial-tool finding never blocks the Required
+      #      build-test check; the findings still show up in the PR comment/artifact for review.
       - name: NDepend (trial)
         if: env.NDEPEND_LICENSE != ''
         uses: ndepend/ndepend-action@v2
+        continue-on-error: true
         with:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           license: ${{ secrets.NDependLicense }}
