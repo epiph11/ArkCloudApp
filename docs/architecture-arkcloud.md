@@ -1,14 +1,14 @@
 # Architecture ArkCloud — document de référence
 
-> Document de référence technique, du plus général (vue d'ensemble) au plus spécifique (chaque flux, chaque module Terraform, chaque table). Généré à partir de l'état réel du code et de l'infrastructure au **12/09/2026** — pas un document théorique, chaque affirmation ici est vérifiable dans le repo (`ArkCloud` et `ArkCloudInfra`) ou dans les ADR/roadmap qui l'accompagnent. Remplace la version du 27/08/2026, qui ne couvrait pas les chantiers de sécurité de fin de Sprint 6 (authentification passwordless AWS, rotation `arkcloud_app` via Kudu côté Azure, démontage du Function App expérimental, rotation admin Postgres Azure).
+> Document de référence technique, du plus général (vue d'ensemble) au plus spécifique (chaque flux, chaque module Terraform, chaque table). Généré à partir de l'état réel du code et de l'infrastructure au **13/09/2026** — pas un document théorique, chaque affirmation ici est vérifiable dans le repo (`ArkCloud` et `ArkCloudInfra`) ou dans les ADR/roadmap qui l'accompagnent. Remplace la version du 12/09/2026, qui ne couvrait pas la clôture réelle du Sprint 6 : le passwordless Azure Entra ID (resté "Proposée" le 12/09) a depuis été opéré en conditions réelles, et le backlog sécurité zéro-coût (#102 : images distroless, secret-scanning pre-commit, DAST, détection de drift Terraform) a été terminé. Voir `docs/etat-des-lieux-sprint6-final.md` pour le détail narratif complet, bug par bug.
 
 ---
 
 ## 1. Résumé exécutif
 
-Le Sprint 6 ("Sécurité cloud avancée") est en voie de clôture. Les chantiers STRIDE, IAM moindre-privilège, rotation de secrets, observabilité et gouvernance documentaire sont tous fonctionnellement terminés et vérifiés en conditions réelles — pas seulement planifiés côté Terraform. Les deux items les plus délicats de la semaine (authentification passwordless AWS pour `arkcloud_app`, et la procédure de rotation manuelle Azure via Kudu) ont été bloqués, diagnostiqués puis débloqués avec des causes racines réelles trouvées à chaque étape.
+Le Sprint 6 ("Sécurité cloud avancée") est **clôturé**. Les chantiers STRIDE, IAM moindre-privilège, rotation de secrets, observabilité, gouvernance documentaire et authentification passwordless (AWS **et** Azure) sont tous fonctionnellement terminés et vérifiés en conditions réelles — pas seulement planifiés côté Terraform. Le passwordless Azure a été le chantier le plus dense du sprint : bloqué par un enchaînement de causes racines réelles (contrainte Azure non documentée sur le changement de Plan App Service, permissions RBAC, fonction `pgaadauth_*` introuvable sur la mauvaise base, un trou pré-existant — migrations jamais appliquées sur `arkcloud` Azure —, et un bug de permissions Postgres), chacune diagnostiquée puis corrigée avec une preuve de fonctionnement réelle à la fin (un test de login retournant `401`, pas `500`).
 
-Statut global : 7 tâches ouvertes closes cette semaine (passwordless AWS, Kudu, démontage du Function App, rotation `arkcloud_app`, rotation admin Postgres Azure, clés Log Analytics, régénération de ce document), zéro tâche bloquante restante sur le Sprint 6.
+Statut global : zéro tâche bloquante restante sur le Sprint 6. Deux items non-bloquants restent en backlog : nettoyage d'une référence réseau orpheline (`snet-web`/`nsg-web`) et connexion réelle de Snyk/SonarCloud à un compte (câblés en CI, pas encore activés faute de token).
 
 ---
 
@@ -21,7 +21,7 @@ Statut global : 7 tâches ouvertes closes cette semaine (passwordless AWS, Kudu,
 | 3 | Authentification JWT, frontend Blazor Server | ✅ Clôturé |
 | 4 | CI/CD GitHub Actions + infrastructure Azure (App Service, PostgreSQL Flexible Server, Key Vault, Application Insights) | ✅ Clôturé (28/07/2026) |
 | 5 | Infrastructure AWS en parallèle (VPC, ECS Fargate, RDS PostgreSQL, ALB, CloudTrail, monitoring) — double-cloud actif | ✅ Clôturé |
-| 6 | Sécurité cloud avancée : NSG flow logs, HTTPS/ACM, rotation automatique des secrets, GuardDuty, Defender for Cloud, audit IAM, fitness functions, STRIDE, RGPD, ADR, passwordless AWS, rotation Azure via Kudu | 🔄 En voie de clôture |
+| 6 | Sécurité cloud avancée : NSG flow logs, HTTPS/ACM, rotation automatique des secrets, GuardDuty, Defender for Cloud, audit IAM, fitness functions, STRIDE, RGPD, ADR, passwordless AWS **et Azure**, rotation Azure via Kudu, sécurité zéro-coût (distroless, pre-commit, DAST, drift) | ✅ Clôturé (13/09/2026) |
 | 7 | Angular enterprise | ⏳ À venir |
 | 8 | Microservices, Kafka, résilience, traçabilité distribuée | ⏳ À venir |
 | 9 | Kubernetes (AKS/EKS) | ⏳ À venir |
@@ -131,7 +131,8 @@ ArkCloud est une application e-commerce B2B (clients / commandes / produits) dé
 | 1. Navigateur → ALB/App Service | Logs d'accès ALB absents | Mitigée (Sprint 6) |
 | 1. Navigateur → ALB/App Service | Pas de rate limiting infra | Acceptée — ADR-0008 |
 | 3. API → base | Compte applicatif trop privilégié | Résolu — bascule réelle vers `arkcloud_app` sur les deux clouds |
-| 3. API → base | Authentification par mot de passe statique (AWS) | Résolu cette semaine — bascule vers token IAM RDS, voir §6.1 |
+| 3. API → base | Authentification par mot de passe statique (AWS) | Résolu — bascule vers token IAM RDS, voir §6.1 |
+| 3. API → base | Authentification par mot de passe statique (Azure) | Résolu (13/09) — bascule vers Entra ID (`DefaultAzureCredential`), voir §6.5 |
 | 3. API → base | Rotation `arkcloud_app` côté Azure sans procédure éprouvée | Résolu cette semaine — Kudu implémenté et vérifié, voir §6.2 |
 | 3. API → base | Données personnelles dans les logs | Mitigée (`AuthService.cs`) |
 | 4. CI → cloud | `GHCR_PAT`, secret humain | Acceptée — ADR-0007, rotation automatisée |
@@ -180,6 +181,29 @@ Déclenchée manuellement par précaution suite à une inquiétude de fuite de s
 Tentative de régénération des clés partagées du workspace `log-arkcloud-dev` par précaution (suite à la purge du tfplan leaké, tâches antérieures). Sans succès : ni le portail Azure (page "Agents" redessinée, section clés disparue ; page "Properties" n'expose que le Workspace ID), ni l'API REST (`regenerateSharedKey`, échec systématique `InvalidParameter` même avec un corps JSON confirmé valide) ne permettent plus cette opération en libre-service pour ce type de ressource.
 
 **Décision** : pas de ticket de support Microsoft ouvert — risque résiduel nul vérifié (aucune référence à ces clés dans le code du projet, aucun agent legacy MMA/OMS connecté au workspace). Documenté dans `ArkCloudInfra/README.md` §10.
+
+### 6.5 Passwordless Azure pour `arkcloud_app` (ADR-0011, 12-13/09/2026) — clôture réelle
+
+Le volet Azure de l'ADR-0011 était resté à l'état de proposition (implémenté côté Terraform/C# mais jamais opéré en réel) jusqu'au 12/09. Bootstrap opérationnel complet effectué en session, avec cinq causes racines réelles trouvées et corrigées en chemin — voir `docs/etat-des-lieux-sprint6-final.md` §5.2 pour le détail intégral, bug par bug (commandes exactes, code, messages d'erreur) :
+
+1. Azure refuse de changer le Plan App Service tant que la Regional VNet Integration est active — toggle Terraform en 2 phases (`disconnect_vnet_for_plan_migration`), qui a aussi permis de fusionner les deux Plans B1 en un seul (~12€/mois économisés).
+2. Permissions RBAC insuffisantes pour la CI sur la mise à jour de la Role Definition — grant explicite au bon scope.
+3. Les fonctions `pgaadauth_*` n'existent que sur la base `postgres`, pas sur `arkcloud` — script SQL corrigé (`\c postgres` puis `\c arkcloud`).
+4. La base Azure `arkcloud` n'avait jamais reçu les migrations EF Core (trou pré-existant, sans rapport avec le passwordless) — appliquées via script généré localement, avec un bug de BOM UTF-8 et un conflit de version NuGet corrigés en route.
+5. `42501: permission denied` sur les tables fraîchement créées — `ALTER DEFAULT PRIVILEGES` ne s'applique qu'aux objets créés par le rôle exact qu'il cible ; re-`GRANT` explicite.
+
+**Preuve de fonctionnement** : `POST /auth/login` avec des identifiants inexistants retourne `401 Invalid email or password` (pas `500`) — preuve que l'app lit la table `users` via un token Entra ID de l'identité managée système, sans aucune chaîne de connexion avec mot de passe. `password_auth_enabled` reste actif côté serveur pour un rollback instantané.
+
+**Statut** : ADR-0011 passe "Acceptée et implémentée" pour les **deux** clouds. Sprint 6 clôturé.
+
+### 6.6 Sécurité zéro-coût (13/09/2026) — backlog #102
+
+Quatre chantiers terminés le jour de la clôture, chacun vérifié en conditions réelles (voir `docs/etat-des-lieux-sprint6-final.md` §9 pour le détail et le code) :
+
+- **Images distroless** : `Dockerfile.blazor` basculé sur `aspnet:10.0-noble-chiseled` ; `Dockerfile.api` gardé sur l'image standard (exception documentée — le `sshd` Kudu de la rotation `arkcloud_app`, §6.2, a besoin d'un shell).
+- **Secret-scanning pre-commit** (`gitleaks`) sur les deux repos — 0 secret détecté au premier scan complet.
+- **DAST** (OWASP ZAP baseline) contre l'API et le Blazor réellement déployés — 0 finding High, dette Medium/Low triée et documentée.
+- **Détection de drift Terraform** — `terraform plan` hebdomadaire en lecture seule ; premier run réel : aucun drift.
 
 ### 6.5 Continuation backlog Sprint 6 (12/09, après-midi)
 
@@ -240,23 +264,26 @@ Rappel d'échéance automatisé : `.github/workflows/secret-expiry-check.yml`, t
 | 0008 | Rate limiting applicatif seul, rien en infra | Acceptée (temporaire) |
 | 0009 | Stratégie de branches et de versionning | Acceptée |
 | 0010 | Rotation `arkcloud_app` Azure via Kudu SSH | Acceptée et implémentée — vérifiée en conditions réelles le 11/09/2026 |
-| 0011 | Authentification passwordless AWS (IAM DB auth) pour `arkcloud_app` | Acceptée et implémentée — vérifiée en production cette semaine ; volet Azure (Entra ID) resté à l'état de proposition |
+| 0011 | Authentification passwordless `arkcloud_app` (AWS IAM DB auth + Azure Entra ID) | **Acceptée et implémentée pour les deux clouds** — vérifiées en conditions réelles (AWS le 10/09, Azure le 12-13/09, voir §6.5) |
 | 0012 | Purge RGPD automatisée — seuil, critère, action, mécanisme asymétrique par cloud | Acceptée et implémentée — `terraform apply` exécuté (12/09) des deux côtés, première exécution réelle pas encore observée |
+| 0013 | Parité d'environnement dev/staging/prod | Acceptée |
 
 *(0006 réservée — la rotation `Jwt:Key` est couverte par l'ADR-0004, le numéro n'est pas réattribué.)*
 
 ---
 
-## 9. Backlog restant (Sprint 6)
+## 9. Backlog restant (post Sprint 6)
 
-- Observer une première exécution réelle de la purge (déclenchement quotidien Azure ou EventBridge AWS) — infrastructure et code déployés (ADR-0012, §6.6), mais aucun run réel constaté à ce jour faute de client réellement inactif depuis 3 ans en base dev.
-- Rapprocher `build.ps1` (script PowerShell ajouté ce sprint faute de bash fonctionnel sur la machine de l'utilisateur) du `build.sh` bash utilisé par la CI — les deux produisent un zip fonctionnellement identique mais pas garanti octet-pour-octet identique, donc un prochain `apply` déclenché par la CI verra potentiellement la Lambda comme modifiée une fois, sans conséquence.
-- Confirmer visuellement la première PR d'onboarding Renovate — app installée et "Enabled" sur les deux repos (§6.5, 12/09), premier job pas encore exécuté.
-- Confirmer "Snyk (container image)" (job `publish-image`) sur un run qui construit réellement l'image Docker — seul "Snyk (dependencies)" a été vérifié jusqu'ici.
+Le Sprint 6 est clôturé (13/09/2026) — les points ci-dessous sont du vrai backlog, non bloquant, pas des tâches de clôture en attente :
+
+- Observer une première exécution réelle de la purge RGPD (déclenchement quotidien Azure ou EventBridge AWS) — infrastructure et code déployés (ADR-0012, §6.6), mais aucun run réel constaté à ce jour faute de client réellement inactif depuis 3 ans en base dev.
+- Rapprocher `build.ps1` (script PowerShell ajouté ce sprint faute de bash fonctionnel sur la machine de l'utilisateur) du `build.sh` bash utilisé par la CI — les deux produisent un zip fonctionnellement identique mais pas garanti octet-pour-octet identique.
+- Confirmer visuellement la première PR d'onboarding Renovate — app installée et "Enabled" sur les deux repos, premier job pas encore exécuté.
+- Confirmer "Snyk (container image)" (job `publish-image`) sur un run qui construit réellement l'image Docker — seul "Snyk (dependencies)" a été vérifié jusqu'ici. Snyk/SonarCloud restent no-op tant qu'aucun token réel n'est configuré.
 - Vérification à l'admission des images signées (OPA/Gatekeeper) — Sprint 9, pas Sprint 6.
-- Volet Azure de l'authentification passwordless (Entra ID pour PostgreSQL) — resté au stade de proposition technique (ADR-0011), non implémenté.
-- Merge `develop` → `main` + tag SemVer à la clôture effective du sprint.
-- Vérification par un run CI réel des changements de cette session (SBOM/Cosign, Snyk/SonarCloud, build Lambda purge RGPD) — le fix RGPD orphelin est déjà validé en local par l'utilisateur (§6.5, 12/09), reste à confirmer les steps CI eux-mêmes sur une PR/push réel (ils sont no-op sans secrets, donc rien à casser en attendant).
+- Nettoyer `snet-web`/`nsg-web` (module `network`, ArkCloudInfra) — orphelins depuis le partage d'un seul App Service Plan (§6.5).
+- `ALTER DEFAULT PRIVILEGES` pour l'admin AAD Azure (backlog noté dans le runbook passwordless, §6.5) — évite un re-`GRANT` manuel après une future migration lancée par un humain plutôt que par `arkcloudadmin`, peu fréquent en pratique.
+- staging/prod restent non provisionnés — seul `dev` a une config Terraform réelle (ADR-0013 pose les bases de parité, implémentation = sprint applicatif futur).
 
 ---
 

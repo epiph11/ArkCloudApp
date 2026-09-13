@@ -6,6 +6,24 @@ Ce fichier démarre à `v0.1.0` (Sprint 6) — voir ADR-0009 (`docs/adr/0009-str
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-09-13
+
+Clôture réelle du Sprint 6 : authentification passwordless Azure Entra ID opérée en conditions réelles (le volet resté "Proposée" en v0.2.0), et backlog sécurité zéro-coût.
+
+### Added
+- Authentification passwordless Azure (Entra ID) pour `arkcloud_app` — `DefaultAzureCredential` via l'identité managée système de l'App Service, vérifiée par un test de login réel (`401 Invalid email or password`, pas un `500`). ADR-0011 passe "Acceptée et implémentée" pour les deux clouds (AWS + Azure). Voir `docs/runbooks/bootstrap-arkcloud-app-azure-entra-id.md` et `docs/etat-des-lieux-sprint6-final.md` §5.2 pour le détail complet, bug par bug.
+- Images Docker distroless : `Dockerfile.blazor` basculé sur `aspnet:10.0-noble-chiseled` (sans shell ni gestionnaire de paquets). `Dockerfile.api` gardé sur l'image standard, exception documentée (sshd Kudu nécessaire à la rotation `arkcloud_app`).
+- Secret-scanning pre-commit (`gitleaks`, framework `pre-commit`) sur `ArkCloudApp` et `ArkCloudInfra` — bloque un commit contenant un secret avant même le push.
+- Scan DAST (OWASP ZAP baseline) contre l'API et le Blazor réellement déployés en dev (`dast-scan.yml`) — 0 finding High au premier passage, dette Medium/Low triée dans `.zap/rules.tsv`.
+- Détection de drift Terraform (`drift-detection.yml`, ArkCloudInfra) — `terraform plan` hebdomadaire en lecture seule, échoue si le state diverge de la réalité.
+
+### Fixed
+- `deploy-on-image.yml` (ArkCloudInfra) échouait sur tout déploiement d'image API/Blazor depuis l'ajout des variables `entra_admin_principal_name`/`entra_admin_object_id` — oubliées dans ce workflow (présentes ailleurs). Corrigé.
+- `ArkCloud.API.csproj` référençait `Azure.Identity` en version inférieure à celle exigée transitivement par `ArkCloud.Infrastructure.csproj` (NU1605, bloquait `dotnet ef migrations script`). Aligné sur 1.14.2.
+- Base de données PostgreSQL Azure `arkcloud` : les migrations EF Core n'avaient jamais été appliquées (trou pré-existant, sans rapport avec ce sprint) — appliquées via script généré localement.
+- Permissions `arkcloud_app` sur les tables nouvellement créées (`42501: permission denied`) — `ALTER DEFAULT PRIVILEGES` ne s'applique qu'aux objets créés par le rôle exact qu'il cible ; re-`GRANT` explicite ajouté.
+- Terraform Azure : changement de Plan App Service impossible tant que la Regional VNet Integration est active — toggle `disconnect_vnet_for_plan_migration` ajouté pour un apply en 2 phases. Ce même correctif a permis de fusionner les deux App Service Plans en un seul (~12€/mois économisés).
+
 ## [0.2.0] - 2026-09-12
 
 Suite de clôture Sprint 6 : sécurisation de la chaîne de livraison (SBOM, signature d'images, analyse statique, scan de vulnérabilités, mises à jour automatisées de dépendances) et conformité RGPD (droit à l'effacement corrigé, purge automatisée).
