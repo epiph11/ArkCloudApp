@@ -27,8 +27,10 @@ on:
 
 permissions:
   contents: read
-  packages: write
-  id-token: write # required for the AWS OIDC login step below (publish-image job only)
+  # packages:write / id-token:write used to live here (workflow level) — SonarCloud flagged
+  # that as too broad (build-test never needs either). Moved to publish-image's own
+  # permissions: block below (13/09/2026, backlog #111), same job-level-override pattern
+  # already used for build-test's pull-requests: write.
 
 env:
   IMAGE_NAME: ghcr.io/${{ github.repository_owner }}/arkcloud-api
@@ -55,10 +57,10 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
 
       - name: Setup .NET
-        uses: actions/setup-dotnet@v4
+        uses: actions/setup-dotnet@67a3573c9a986a3f9c594539f4ab511d57bb3ce9 # v4
         with:
           dotnet-version: 10.0.x
 
@@ -75,7 +77,7 @@ jobs:
       # this repo secret) — same pattern as NDepend/SonarCloud in this workflow.
       - name: Snyk (dependencies)
         if: env.SNYK_TOKEN != ''
-        uses: snyk/actions/dotnet@master
+        uses: snyk/actions/dotnet@12140f4059e244892ae643824a95459a102120dd # master (13/09/2026)
         continue-on-error: true
         env:
           SNYK_TOKEN: ${{ env.SNYK_TOKEN }}
@@ -91,7 +93,7 @@ jobs:
       # SONAR_PROJECT_KEY as repo variables).
       - name: Setup Java (SonarCloud scanner)
         if: env.SONAR_TOKEN != ''
-        uses: actions/setup-java@v4
+        uses: actions/setup-java@cf277c60eb25467037889841efdb72551f06f6c3 # v4
         with:
           distribution: temurin
           java-version: 17
@@ -104,7 +106,8 @@ jobs:
             /k:"${{ vars.SONAR_PROJECT_KEY }}" \
             /o:"${{ vars.SONAR_ORGANIZATION }}" \
             /d:sonar.token="${{ env.SONAR_TOKEN }}" \
-            /d:sonar.host.url="https://sonarcloud.io"
+            /d:sonar.host.url="https://sonarcloud.io" \
+            /d:sonar.cs.cobertura.reportsPaths="**/TestResults/**/coverage.cobertura.xml"
 
       - name: Build
         run: |
@@ -113,10 +116,17 @@ jobs:
           dotnet build backend/tests/ArkCloud.Tests.Integration/ArkCloud.Tests.Integration.csproj --no-restore --configuration Release
           dotnet build backend/tests/ArkCloud.Tests.Architecture/ArkCloud.Tests.Architecture.csproj --no-restore --configuration Release
 
+      # --collect:"XPlat Code Coverage" (coverlet, bundled with the SDK test templates already
+      # used by these two projects) writes a Cobertura XML per project run under a random-GUID
+      # subfolder of --results-directory — the glob in SonarCloud — begin above
+      # (**/TestResults/**/coverage.cobertura.xml) picks up both without hardcoding the GUID.
+      # Fixes the Quality Gate's 0.0% coverage (first real scan, 13/09/2026, backlog #111) — it
+      # was reading "no tests ran" because no coverage report existed yet, not because tests
+      # were actually missing.
       - name: Test
         run: |
-          dotnet test backend/tests/ArkCloud.Tests.Unit/ArkCloud.Tests.Unit.csproj --no-build --configuration Release --logger trx --results-directory ./TestResults
-          dotnet test backend/tests/ArkCloud.Tests.Integration/ArkCloud.Tests.Integration.csproj --no-build --configuration Release --logger trx --results-directory ./TestResults
+          dotnet test backend/tests/ArkCloud.Tests.Unit/ArkCloud.Tests.Unit.csproj --no-build --configuration Release --logger trx --results-directory ./TestResults --collect:"XPlat Code Coverage"
+          dotnet test backend/tests/ArkCloud.Tests.Integration/ArkCloud.Tests.Integration.csproj --no-build --configuration Release --logger trx --results-directory ./TestResults --collect:"XPlat Code Coverage"
 
       # Sprint 6 fitness functions — fails the build if a commit breaks the Clean Architecture
       # dependency direction (Domain/Application/Infrastructure/API) or leaks EF Core/ASP.NET
@@ -133,7 +143,7 @@ jobs:
 
       - name: Upload test results
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: backend-test-results
           path: ./TestResults
@@ -158,7 +168,7 @@ jobs:
       #      build-test check; the findings still show up in the PR comment/artifact for review.
       - name: NDepend (trial)
         if: env.NDEPEND_LICENSE != ''
-        uses: ndepend/ndepend-action@v2
+        uses: ndepend/ndepend-action@be6c2e0830c672a6062cbfa00ac03c1c90d7eaa5 # v2
         continue-on-error: true
         with:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -185,6 +195,12 @@ jobs:
     # manual approval gate before any vX.Y.Z tag actually gets pushed to the registry —
     # no workflow change needed to turn that on.
     environment: ${{ startsWith(github.ref, 'refs/tags/v') && 'production' || github.ref_name == 'staging' && 'staging' || 'development' }}
+    # Job-level permissions (13/09/2026, backlog #111) — the only job here that needs
+    # packages:write (GHCR push) and id-token:write (AWS OIDC step below).
+    permissions:
+      contents: read
+      packages: write
+      id-token: write
     env:
       # Tag pushes (vX.Y.Z) publish under the version itself; branch pushes publish under
       # a floating tag for that environment.
@@ -195,7 +211,7 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
 
       - name: Build Docker image
         run: docker build -f deploy/docker/Dockerfile.api -t ${{ env.IMAGE_NAME }}:${{ github.sha }} -t ${{ env.IMAGE_NAME }}:${{ env.ENV_TAG }} .
@@ -209,7 +225,7 @@ jobs:
       # this step (and therefore the job) fail on any CRITICAL/HIGH finding that has a known
       # fix — ignore-unfixed avoids blocking on base-image CVEs nobody can patch yet.
       - name: Scan image with Trivy
-        uses: aquasecurity/trivy-action@v0.36.0
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
         with:
           image-ref: ${{ env.IMAGE_NAME }}:${{ github.sha }}
           format: table
@@ -223,7 +239,7 @@ jobs:
       # its findings have been triaged at least once. No-op until SNYK_TOKEN exists.
       - name: Snyk (container image)
         if: env.SNYK_TOKEN != ''
-        uses: snyk/actions/docker@master
+        uses: snyk/actions/docker@12140f4059e244892ae643824a95459a102120dd # master (13/09/2026)
         continue-on-error: true
         env:
           SNYK_TOKEN: ${{ env.SNYK_TOKEN }}
@@ -232,7 +248,7 @@ jobs:
           args: --severity-threshold=high --file=deploy/docker/Dockerfile.api
 
       - name: Log in to GHCR
-        uses: docker/login-action@v3
+        uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
@@ -264,20 +280,20 @@ jobs:
       # anchore/sbom-action wraps Syft — generates an SPDX SBOM straight from the pushed image
       # (not the local build context), so it reflects what's actually in the registry.
       - name: Generate SBOM (Syft)
-        uses: anchore/sbom-action@v0.17.9
+        uses: anchore/sbom-action@df80a981bc6edbc4e220a492d3cbe9f5547a6e75 # v0.17.9
         with:
           image: ${{ env.IMAGE_NAME }}@${{ steps.digest.outputs.digest }}
           format: spdx-json
           output-file: sbom-api.spdx.json
 
       - name: Upload SBOM artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: sbom-api
           path: sbom-api.spdx.json
 
       - name: Install Cosign
-        uses: sigstore/cosign-installer@v3
+        uses: sigstore/cosign-installer@398d4b0eeef1380460a10c8013a76f728fb906ac # v3
 
       # Keyless signing via GitHub's OIDC token (id-token: write, already granted above) —
       # no signing key to generate, store, or rotate. Signs the digest, not a mutable tag.
@@ -313,14 +329,14 @@ jobs:
       # step itself needs no change (ECR_REPOSITORY already derives from TF_ENVIRONMENT).
       - name: Configure AWS credentials
         if: env.TF_ENVIRONMENT == 'dev'
-        uses: aws-actions/configure-aws-credentials@v4
+        uses: aws-actions/configure-aws-credentials@7474bc4690e29a8392af63c5b98e7449536d5c3a # v4
         with:
           role-to-assume: ${{ secrets.AWS_APP_CI_ROLE_ARN }}
           aws-region: eu-west-1
 
       - name: Log in to ECR
         if: env.TF_ENVIRONMENT == 'dev'
-        uses: aws-actions/amazon-ecr-login@v2
+        uses: aws-actions/amazon-ecr-login@03f1aad4c6c7ffd436567f42f9384779290529bd # v2
 
       - name: Tag and push image to ECR
         if: env.TF_ENVIRONMENT == 'dev'
@@ -338,7 +354,7 @@ jobs:
       # INFRA_DISPATCH_TOKEN is a fine-grained PAT with Contents:write on ArkCloudInfra only —
       # GITHUB_TOKEN can't be used here, it's scoped to this repo and can't dispatch to another.
       - name: Notify ArkCloudInfra of new image
-        uses: peter-evans/repository-dispatch@v3
+        uses: peter-evans/repository-dispatch@ff45666b9427631e3450c54a1bcbee4d9ff4d7c0 # v3
         with:
           token: ${{ secrets.INFRA_DISPATCH_TOKEN }}
           repository: ${{ github.repository_owner }}/ArkCloudInfra

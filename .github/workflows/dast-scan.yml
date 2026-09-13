@@ -23,22 +23,26 @@ on:
 
 permissions:
   contents: read
-  issues: write # zaproxy/action-baseline peut ouvrir une issue de suivi si demandé plus tard
+  # issues:write déplacé au niveau job (13/09/2026, backlog #111) — SonarCloud a signalé le
+  # grant au niveau workflow comme trop large.
 
 jobs:
   zap-api:
     name: ZAP baseline — API
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      issues: write # zaproxy/action-baseline peut ouvrir une issue de suivi si demandé plus tard
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
 
       # Image officielle OWASP ZAP, gratuite, pas de token/compte nécessaire. Scan "baseline" =
       # spider passif + règles actives non-intrusives (pas de scan actif agressif qui pourrait
       # écrire des données ou déclencher le cost-guard via une charge inhabituelle) — adapté à un
       # environnement dev partagé plutôt qu'un scan "full" réservé à un environnement jetable.
       - name: ZAP baseline scan — API
-        uses: zaproxy/action-baseline@v0.14.0
+        uses: zaproxy/action-baseline@7c4deb10e6261301961c86d65d54a516394f9aed # v0.14.0
         with:
           target: "https://app-arkcloud-api-dev.azurewebsites.net"
           # /health n'exerce aucune route applicative réelle (voir Program.cs — pas de check DB) ;
@@ -51,12 +55,15 @@ jobs:
   zap-web:
     name: ZAP baseline — Blazor
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      issues: write
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
 
       - name: ZAP baseline scan — Blazor
-        uses: zaproxy/action-baseline@v0.14.0
+        uses: zaproxy/action-baseline@7c4deb10e6261301961c86d65d54a516394f9aed # v0.14.0
         with:
           target: "https://app-arkcloud-web-dev.azurewebsites.net"
           cmd_options: "-a"
