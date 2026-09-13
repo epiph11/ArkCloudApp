@@ -10,10 +10,13 @@ name: DAST — scan dynamique (OWASP ZAP)
 # pendant que l'environnement est éteint échouerait bruyamment pour rien. À lancer à la main après
 # un dev-env-up.yml, ou juste avant de clore une session de test.
 #
-# Exploratoire pour l'instant (continue-on-error sur les deux scans, même pattern que NDepend/Snyk
-# container dans arkcloud-backend-ci.yml) : premier passage, findings pas encore triés entre "vrai
-# problème" et "bruit attendu sur un dev B1 sans WAF". À durcir (retirer continue-on-error) une
-# fois un premier rapport lu et les faux positifs connus ajoutés à un fichier de règles ZAP dédié.
+# Premier passage réel le 13/09/2026 : 0 High sur les deux apps, quelques Medium/Low (en-têtes de
+# sécurité manquants — HSTS, CSP, Permissions-Policy, etc.) triés et acceptés comme dette technique
+# documentée dans .zap/rules.tsv (chaque ligne = un rule ID ZAP, IGNORE + justification). Gate
+# durci en conséquence : continue-on-error retiré, ces deux jobs échouent désormais sur tout NOUVEAU
+# type de finding (High ou Medium/Low non listé dans rules.tsv) — pas sur la récurrence des
+# instances déjà triées. Pour accepter un nouveau finding : l'ajouter à .zap/rules.tsv avec le même
+# format, jamais juste re-ajouter continue-on-error en réflexe.
 
 on:
   workflow_dispatch:
@@ -36,13 +39,13 @@ jobs:
       # environnement dev partagé plutôt qu'un scan "full" réservé à un environnement jetable.
       - name: ZAP baseline scan — API
         uses: zaproxy/action-baseline@v0.14.0
-        continue-on-error: true
         with:
           target: "https://app-arkcloud-api-dev.azurewebsites.net"
           # /health n'exerce aucune route applicative réelle (voir Program.cs — pas de check DB) ;
           # le spider ZAP part de la racine et suit les liens qu'il trouve, y compris ceux exposés
           # par Swagger (Swashbuckle.AspNetCore, activé dans ArkCloud.API.csproj) si accessible.
           cmd_options: "-a"
+          rules_file_name: ".zap/rules.tsv"
           artifact_name: "zap-report-api"
 
   zap-web:
@@ -54,8 +57,8 @@ jobs:
 
       - name: ZAP baseline scan — Blazor
         uses: zaproxy/action-baseline@v0.14.0
-        continue-on-error: true
         with:
           target: "https://app-arkcloud-web-dev.azurewebsites.net"
           cmd_options: "-a"
+          rules_file_name: ".zap/rules.tsv"
           artifact_name: "zap-report-web"

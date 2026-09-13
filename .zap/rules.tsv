@@ -1,0 +1,12 @@
+10035	IGNORE	Strict-Transport-Security Header Not Set — dette technique acceptée (13/09/2026, backlog #102). B1 sans WAF/CDN devant ; à réactiver (retirer cette ligne) une fois HSTS ajouté côté Program.cs des deux apps.
+90005	IGNORE	Sec-Fetch-Dest/Mode/Site/User Header is Missing — en-têtes envoyés par le NAVIGATEUR client, pas configurables côté serveur ; faux positif structurel sur une API pure et un premier chargement de page Blazor.
+10049	IGNORE	Storable and Cacheable Content / Non-Storable Content — informationnel, pas de contenu sensible identifié dans les réponses scannées (13/09/2026).
+10055	IGNORE	CSP: directives manquantes / wildcard / unsafe-inline — dette technique acceptée (13/09/2026, backlog #102), Blazor Server a besoin d'inline scripts pour son bootstrap. À durcir avec une CSP par nonce plus tard.
+10011	IGNORE	Cookie Without Secure Flag (.AspNetCore.Antiforgery) — dette technique acceptée (13/09/2026, backlog #102) ; l'app est déjà servie en HTTPS uniquement (App Service force le TLS), à corriger via ForwardedHeaders/cookie policy.
+90004	IGNORE	Cross-Origin-Embedder/Opener/Resource-Policy Header Missing — dette technique acceptée (13/09/2026, backlog #102).
+10063	IGNORE	Permissions Policy Header Not Set — dette technique acceptée (13/09/2026, backlog #102).
+10021	IGNORE	X-Content-Type-Options Header Missing — dette technique acceptée (13/09/2026, backlog #102).
+10094	IGNORE	Base64 Disclosure — vérifié (13/09/2026) : c'est le token antiforgery ASP.NET Core chiffré, pas une fuite de données.
+10109	IGNORE	Modern Web Application — purement informationnel (détection de SPA/Blazor), rien à corriger.
+10015	IGNORE	Re-examine Cache-control Directives — informationnel, déjà en no-cache/no-store sur les pages dynamiques (vérifié 13/09/2026).
+10112	IGNORE	Session Management Response Identified — informationnel (détection du cookie antiforgery comme jeton de session), rien à corriger.
