@@ -1,0 +1,641 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<title>ArkCloud — État des lieux final, Sprint 6</title>
+<style>
+  :root{
+    --azure:#0078D4; --azure-dark:#004578; --azure-bg:#EFF6FC;
+    --aws:#FF9900; --aws-dark:#B35C00; --aws-bg:#FFF8EE;
+    --sec:#D13438; --ok:#107C10; --warn:#C19C00;
+    --ink:#201F1E; --sub:#605E5C; --line:#D2D0CE; --panel:#F8F7F6;
+    --mono: 'Cascadia Code', Consolas, 'Courier New', monospace;
+  }
+  *{box-sizing:border-box}
+  body{
+    font-family: 'Segoe UI', Calibri, Arial, sans-serif;
+    color:var(--ink); line-height:1.55; margin:0; background:#fff;
+    font-size:14.5px;
+  }
+  .page{max-width:960px; margin:0 auto; padding:40px 56px 80px;}
+  .cover{
+    background:linear-gradient(135deg, var(--azure-dark), var(--azure) 55%, var(--aws) 100%);
+    color:#fff; padding:90px 56px; margin-bottom:0;
+  }
+  .cover .eyebrow{letter-spacing:2px; text-transform:uppercase; font-size:12.5px; opacity:.85; margin-bottom:14px;}
+  .cover h1{font-size:38px; margin:0 0 10px; font-weight:700; line-height:1.2;}
+  .cover .sub{font-size:16px; opacity:.92; max-width:640px;}
+  .cover .meta{margin-top:40px; font-size:12.5px; opacity:.85; border-top:1px solid rgba(255,255,255,.3); padding-top:16px;}
+  h1{font-size:26px; border-bottom:3px solid var(--azure); padding-bottom:8px; margin-top:50px;}
+  h2{font-size:19px; color:var(--azure-dark); margin-top:36px; border-left:4px solid var(--azure); padding-left:10px;}
+  h3{font-size:16px; color:var(--ink); margin-top:26px;}
+  h4{font-size:14px; color:var(--sub); margin-top:20px; text-transform:uppercase; letter-spacing:.5px;}
+  p{margin:10px 0;}
+  a{color:var(--azure-dark);}
+  table{border-collapse:collapse; width:100%; margin:16px 0; font-size:13px;}
+  th,td{border:1px solid var(--line); padding:7px 10px; text-align:left; vertical-align:top;}
+  th{background:var(--panel); font-weight:600;}
+  tr:nth-child(even) td{background:#FCFCFB;}
+  code{font-family:var(--mono); background:var(--panel); padding:1px 5px; border-radius:3px; font-size:12.5px; border:1px solid var(--line);}
+  pre{
+    background:#1E1E1E; color:#D4D4D4; padding:14px 16px; border-radius:6px;
+    font-family:var(--mono); font-size:12px; overflow-x:auto; line-height:1.5;
+    border-left:4px solid var(--azure);
+  }
+  pre code{background:none; border:none; padding:0; color:inherit;}
+  .callout{
+    background:var(--azure-bg); border-left:4px solid var(--azure); padding:12px 16px;
+    border-radius:0 4px 4px 0; margin:16px 0; font-size:13.5px;
+  }
+  .callout.warn{background:#FFF4CE; border-left-color:var(--warn);}
+  .callout.ok{background:#DFF6DD; border-left-color:var(--ok);}
+  .callout.sec{background:#FDE7E9; border-left-color:var(--sec);}
+  .badge{display:inline-block; padding:2px 9px; border-radius:10px; font-size:11px; font-weight:600; color:#fff;}
+  .badge.ok{background:var(--ok);} .badge.warn{background:var(--warn); color:#3B3300;} .badge.sec{background:var(--sec);}
+  .badge.azure{background:var(--azure);} .badge.aws{background:var(--aws); color:#3B2400;}
+  .figure{margin:22px 0; text-align:center; page-break-inside:avoid;}
+  .figure svg{max-width:100%; height:auto; border:1px solid var(--line); border-radius:8px; background:#fff;}
+  .figure .cap{font-size:12px; color:var(--sub); margin-top:8px; font-style:italic;}
+  .toc{background:var(--panel); border:1px solid var(--line); border-radius:8px; padding:20px 28px; margin:24px 0;}
+  .toc h2{margin-top:0; border:none; padding-left:0;}
+  .toc ol{margin:0; padding-left:20px; columns:1;}
+  .toc li{margin:5px 0;}
+  .toc a{text-decoration:none; color:var(--ink);}
+  .toc a:hover{color:var(--azure-dark);}
+  hr{border:none; border-top:1px solid var(--line); margin:32px 0;}
+  .grid2{display:grid; grid-template-columns:1fr 1fr; gap:16px;}
+  .kpi{background:var(--panel); border:1px solid var(--line); border-radius:8px; padding:14px 18px; text-align:center;}
+  .kpi .num{font-size:26px; font-weight:700; color:var(--azure-dark);}
+  .kpi .lbl{font-size:11.5px; color:var(--sub); text-transform:uppercase; letter-spacing:.5px;}
+  @media print{
+    .cover{padding:60px 56px;}
+    .page{padding:0 56px;}
+    h1{page-break-before:always;}
+    h1:first-of-type{page-break-before:avoid;}
+    .figure{page-break-inside:avoid;}
+    a{color:var(--ink); text-decoration:none;}
+  }
+</style>
+</head>
+<body>
+
+<div class="cover">
+  <div class="eyebrow">ArkCloud · Rapport technique de clôture</div>
+  <h1>État des lieux final<br>Sprint 6 — Sécurité cloud avancée</h1>
+  <div class="sub">Double-cloud Azure + AWS · authentification passwordless, threat modeling STRIDE, RGPD, chaîne d'approvisionnement logicielle et sécurité CI/CD zéro-coût.</div>
+  <div class="meta">
+    Version du 13 septembre 2026 (mise à jour du 13/09 en fin de journée : nettoyage réseau #104, durcissement CI/scans réels #111)<br>
+    Sources : dépôts <code style="background:rgba(255,255,255,.15); color:#fff; border-color:rgba(255,255,255,.3)">ArkCloud</code> et <code style="background:rgba(255,255,255,.15); color:#fff; border-color:rgba(255,255,255,.3)">ArkCloudInfra</code>, docs/adr/, docs/runbooks/, SonarCloud/Snyk (scans réels 13/09)
+  </div>
+</div>
+
+<div class="page">
+
+<div class="toc">
+<h2>Sommaire</h2>
+<ol>
+  <li><a href="#s1">Résumé exécutif</a></li>
+  <li><a href="#s2">Architecture — vue d'ensemble double-cloud</a></li>
+  <li><a href="#s3">Chronologie du sprint</a></li>
+  <li><a href="#s4">Modélisation de menaces STRIDE — bilan</a></li>
+  <li><a href="#s5">Authentification passwordless — les deux clouds</a></li>
+  <li><a href="#s6">RGPD — classification, correction, purge</a></li>
+  <li><a href="#s7">Chaîne d'approvisionnement logicielle &amp; scans réels</a></li>
+  <li><a href="#s8">Réseau Azure — nettoyage et état final</a></li>
+  <li><a href="#s9">Pipeline CI/CD — vue d'ensemble</a></li>
+  <li><a href="#s10">Coûts</a></li>
+  <li><a href="#s11">Backlog #102 — sécurité zéro-coût (détail)</a></li>
+  <li><a href="#s12">Registre des décisions d'architecture (ADR)</a></li>
+  <li><a href="#s13">Ce qui reste ouvert</a></li>
+</ol>
+</div>
+
+<h1 id="s1">1. Résumé exécutif</h1>
+
+<p>Le Sprint 6 est le plus long et le plus dense du projet à ce jour (démarré fin août, clos le 13/09/2026). Il fait suite à un incident réel — la fuite publique d'un fichier <code>tfplan</code> contenant l'état Terraform complet avec des secrets en clair — et s'est structuré en six axes :</p>
+
+<table>
+<tr><th style="width:26px">#</th><th>Axe</th><th>Contenu</th></tr>
+<tr><td>1</td><td>Durcissement infrastructure</td><td>Logs d'accès, chiffrement, IAM moindre-privilège, threat detection (GuardDuty, Defender for Cloud), NSG flow logs.</td></tr>
+<tr><td>2</td><td>Threat modeling STRIDE</td><td>5 flux de confiance analysés, 3 menaces réelles trouvées et mitigées en conditions réelles.</td></tr>
+<tr><td>3</td><td>Réduction du privilège applicatif</td><td>Rôle <code>arkcloud_app</code> (DML seul) sur les deux clouds, puis <strong>authentification passwordless complète</strong> — zéro mot de passe stocké pour la connexion applicative, sur les deux clouds, vérifié par un test de connexion réel.</td></tr>
+<tr><td>4</td><td>Conformité RGPD</td><td>Classification des données, correction d'une FK orpheline, purge automatisée (rétention 3 ans).</td></tr>
+<tr><td>5</td><td>Sécurité zéro-coût (#102)</td><td>SBOM + signature d'images, puis images distroless, secret-scanning pre-commit, DAST, détection de drift Terraform.</td></tr>
+<tr><td>6</td><td>Durcissement CI &amp; scans réels (#104, #111)</td><td>Nettoyage réseau orphelin, actions GitHub pinnées sur SHA, permissions au niveau job, Snyk/SonarCloud réellement connectés et triés.</td></tr>
+</table>
+
+<div class="grid2" style="margin-top:24px">
+  <div class="kpi"><div class="num">0</div><div class="lbl">Menace STRIDE en attente</div></div>
+  <div class="kpi"><div class="num">0</div><div class="lbl">Mot de passe applicatif stocké</div></div>
+  <div class="kpi"><div class="num">0</div><div class="lbl">Finding High DAST</div></div>
+  <div class="kpi"><div class="num">100%</div><div class="lbl">Backlog #102 terminé</div></div>
+</div>
+
+<p style="margin-top:20px"><strong>État à la clôture (13/09, fin de journée)</strong> : zéro menace STRIDE en attente, zéro secret en clair dans le code de connexion applicative sur les deux clouds, zéro finding High sur le DAST, backlog #102 terminé à 100%, référence réseau orpheline (<code>snet-web</code>/<code>nsg-web</code>) retirée et appliquée en Azure réel, actions GitHub Actions pinnées sur hash de commit complet (durcissement chaîne d'approvisionnement CI), et Snyk/SonarCloud réellement connectés et triés (27 findings de sécurité initiaux ramenés à 1, résiduel documenté et accepté).</p>
+
+<hr>
+
+<h1 id="s2">2. Architecture — vue d'ensemble double-cloud</h1>
+
+<p>ArkCloud reste déployé en double-cloud actif (Azure + AWS), deux piles applicatives complètes et indépendantes. Le changement majeur du sprint : <strong>les deux piles s'authentifient désormais à leur base PostgreSQL sans mot de passe stocké</strong>, via l'identité de calcul native de chaque cloud.</p>
+
+<div class="figure">
+<svg viewBox="0 0 1000 620" xmlns="http://www.w3.org/2000/svg" font-family="Segoe UI, Arial, sans-serif">
+  <defs>
+    <marker id="arrow" markerWidth="10" markerHeight="10" refX="8" refY="3" orient="auto"><path d="M0,0 L8,3 L0,6 Z" fill="#605E5C"/></marker>
+    <marker id="arrowOk" markerWidth="10" markerHeight="10" refX="8" refY="3" orient="auto"><path d="M0,0 L8,3 L0,6 Z" fill="#107C10"/></marker>
+  </defs>
+  <rect x="0" y="0" width="1000" height="620" fill="#fff"/>
+
+  <!-- User -->
+  <circle cx="500" cy="35" r="18" fill="#F3F2F1" stroke="#605E5C" stroke-width="1.5"/>
+  <path d="M493,30 a7,7 0 1,1 14,0 a7,7 0 1,1 -14,0 M485,46 q15,-12 30,0" fill="none" stroke="#605E5C" stroke-width="1.5"/>
+  <text x="500" y="68" text-anchor="middle" font-size="12" fill="#605E5C">Utilisateur final (navigateur)</text>
+
+  <line x1="500" y1="53" x2="270" y2="100" stroke="#605E5C" stroke-width="1.5" marker-end="url(#arrow)"/>
+  <line x1="500" y1="53" x2="730" y2="100" stroke="#605E5C" stroke-width="1.5" marker-end="url(#arrow)"/>
+  <text x="360" y="82" font-size="11" fill="#605E5C">HTTPS</text>
+  <text x="640" y="82" font-size="11" fill="#605E5C">HTTPS</text>
+
+  <!-- AWS column -->
+  <rect x="60" y="100" width="400" height="470" rx="10" fill="#FFF8EE" stroke="#FF9900" stroke-width="1.5"/>
+  <rect x="60" y="100" width="400" height="34" rx="10" fill="#FF9900"/>
+  <rect x="60" y="118" width="400" height="16" fill="#FF9900"/>
+  <text x="80" y="122" font-size="14" font-weight="700" fill="#3B2400">AWS — eu-west-1</text>
+
+  <rect x="100" y="150" width="320" height="42" rx="6" fill="#fff" stroke="#FF9900"/>
+  <text x="260" y="167" text-anchor="middle" font-size="12" font-weight="600">Application Load Balancer</text>
+  <text x="260" y="182" text-anchor="middle" font-size="10.5" fill="#605E5C">HTTPS, certificat auto-signé (ADR-0003)</text>
+  <line x1="260" y1="192" x2="260" y2="212" stroke="#605E5C" stroke-width="1.5" marker-end="url(#arrow)"/>
+
+  <rect x="100" y="212" width="150" height="44" rx="6" fill="#fff" stroke="#FF9900"/>
+  <text x="175" y="230" text-anchor="middle" font-size="11.5" font-weight="600">ECS Fargate</text>
+  <text x="175" y="244" text-anchor="middle" font-size="10.5" fill="#605E5C">web (Blazor)</text>
+
+  <rect x="270" y="212" width="150" height="44" rx="6" fill="#fff" stroke="#FF9900"/>
+  <text x="345" y="230" text-anchor="middle" font-size="11.5" font-weight="600">ECS Fargate</text>
+  <text x="345" y="244" text-anchor="middle" font-size="10.5" fill="#605E5C">api (.NET)</text>
+
+  <line x1="175" y1="256" x2="345" y2="256" stroke="#605E5C" stroke-width="1.2"/>
+  <line x1="260" y1="256" x2="345" y2="256" stroke="#605E5C" stroke-width="1.2" marker-end="url(#arrow)"/>
+  <text x="300" y="270" font-size="10" fill="#605E5C">JWT (HTTP interne)</text>
+
+  <line x1="345" y1="256" x2="345" y2="300" stroke="#107C10" stroke-width="1.8" marker-end="url(#arrowOk)"/>
+  <rect x="245" y="300" width="200" height="46" rx="6" fill="#DFF6DD" stroke="#107C10"/>
+  <text x="345" y="318" text-anchor="middle" font-size="11.5" font-weight="700" fill="#0B5A0B">IAM DB Authentication</text>
+  <text x="345" y="332" text-anchor="middle" font-size="10" fill="#0B5A0B">token 15 min · via arkcloud_app</text>
+
+  <line x1="345" y1="346" x2="345" y2="374" stroke="#107C10" stroke-width="1.8" marker-end="url(#arrowOk)"/>
+  <rect x="245" y="374" width="200" height="46" rx="6" fill="#fff" stroke="#FF9900"/>
+  <text x="345" y="392" text-anchor="middle" font-size="11.5" font-weight="600">RDS PostgreSQL</text>
+  <text x="345" y="406" text-anchor="middle" font-size="10" fill="#605E5C">psql-arkcloud-dev · privé (VPC)</text>
+
+  <rect x="100" y="440" width="150" height="44" rx="6" fill="#fff" stroke="#FF9900" stroke-dasharray="3,2"/>
+  <text x="175" y="458" text-anchor="middle" font-size="11" font-weight="600">Secrets Manager</text>
+  <text x="175" y="472" text-anchor="middle" font-size="9.5" fill="#605E5C">admin only</text>
+
+  <rect x="270" y="440" width="150" height="44" rx="6" fill="#fff" stroke="#FF9900" stroke-dasharray="3,2"/>
+  <text x="345" y="458" text-anchor="middle" font-size="11" font-weight="600">Lambda rotation</text>
+  <text x="345" y="472" text-anchor="middle" font-size="9.5" fill="#605E5C">admin · 90 jours</text>
+
+  <!-- Azure column -->
+  <rect x="540" y="100" width="400" height="470" rx="10" fill="#EFF6FC" stroke="#0078D4" stroke-width="1.5"/>
+  <rect x="540" y="100" width="400" height="34" rx="10" fill="#0078D4"/>
+  <rect x="540" y="118" width="400" height="16" fill="#0078D4"/>
+  <text x="560" y="122" font-size="14" font-weight="700" fill="#fff">Azure — westeurope</text>
+
+  <rect x="580" y="150" width="320" height="42" rx="6" fill="#fff" stroke="#0078D4"/>
+  <text x="740" y="167" text-anchor="middle" font-size="12" font-weight="600">App Service Plan partagé (B1)</text>
+  <text x="740" y="182" text-anchor="middle" font-size="10.5" fill="#605E5C">asp-arkcloud-dev · ~12€/mois économisés</text>
+  <line x1="740" y1="192" x2="740" y2="212" stroke="#605E5C" stroke-width="1.5" marker-end="url(#arrow)"/>
+
+  <rect x="580" y="212" width="150" height="44" rx="6" fill="#fff" stroke="#0078D4"/>
+  <text x="655" y="230" text-anchor="middle" font-size="11.5" font-weight="600">app-web</text>
+  <text x="655" y="244" text-anchor="middle" font-size="10.5" fill="#605E5C">(Blazor)</text>
+
+  <rect x="750" y="212" width="150" height="44" rx="6" fill="#fff" stroke="#0078D4"/>
+  <text x="825" y="230" text-anchor="middle" font-size="11.5" font-weight="600">app-api</text>
+  <text x="825" y="244" text-anchor="middle" font-size="10.5" fill="#605E5C">(.NET API)</text>
+
+  <line x1="655" y1="256" x2="825" y2="256" stroke="#605E5C" stroke-width="1.2"/>
+  <line x1="740" y1="256" x2="825" y2="256" stroke="#605E5C" stroke-width="1.2" marker-end="url(#arrow)"/>
+  <text x="770" y="270" font-size="10" fill="#605E5C">HTTP interne (même snet-api)</text>
+
+  <line x1="825" y1="256" x2="825" y2="300" stroke="#107C10" stroke-width="1.8" marker-end="url(#arrowOk)"/>
+  <rect x="725" y="300" width="200" height="46" rx="6" fill="#DFF6DD" stroke="#107C10"/>
+  <text x="825" y="315" text-anchor="middle" font-size="11" font-weight="700" fill="#0B5A0B">Managed Identity système</text>
+  <text x="825" y="329" text-anchor="middle" font-size="9.5" fill="#0B5A0B">token Entra ID (AAD) · arkcloud_app</text>
+  <text x="825" y="341" text-anchor="middle" font-size="9.5" fill="#0B5A0B">401 propre, jamais 500 (vérifié)</text>
+
+  <line x1="825" y1="346" x2="825" y2="374" stroke="#107C10" stroke-width="1.8" marker-end="url(#arrowOk)"/>
+  <rect x="725" y="374" width="200" height="46" rx="6" fill="#fff" stroke="#0078D4"/>
+  <text x="825" y="392" text-anchor="middle" font-size="11.5" font-weight="600">PostgreSQL Flexible Server</text>
+  <text x="825" y="406" text-anchor="middle" font-size="10" fill="#605E5C">psql-arkcloud-dev · privé (VNet)</text>
+
+  <rect x="580" y="440" width="150" height="44" rx="6" fill="#fff" stroke="#0078D4" stroke-dasharray="3,2"/>
+  <text x="655" y="458" text-anchor="middle" font-size="11" font-weight="600">Key Vault</text>
+  <text x="655" y="472" text-anchor="middle" font-size="9.5" fill="#605E5C">admin only</text>
+
+  <rect x="750" y="440" width="150" height="44" rx="6" fill="#fff" stroke="#0078D4" stroke-dasharray="3,2"/>
+  <text x="825" y="458" text-anchor="middle" font-size="11" font-weight="600">Automation Runbook</text>
+  <text x="825" y="472" text-anchor="middle" font-size="9.5" fill="#605E5C">rotation admin · 90 jours</text>
+
+  <!-- GitHub Actions bottom -->
+  <line x1="260" y1="530" x2="260" y2="560" stroke="#605E5C" stroke-width="1.2"/>
+  <line x1="740" y1="530" x2="740" y2="560" stroke="#605E5C" stroke-width="1.2"/>
+  <rect x="260" y="560" width="480" height="42" rx="8" fill="#24292E"/>
+  <line x1="260" y1="581" x2="500" y2="560" stroke="#605E5C" stroke-width="1.2"/>
+  <line x1="740" y1="581" x2="500" y2="560" stroke="#605E5C" stroke-width="1.2"/>
+  <text x="500" y="578" text-anchor="middle" font-size="12" font-weight="700" fill="#fff">GitHub Actions</text>
+  <text x="500" y="593" text-anchor="middle" font-size="9.5" fill="#C9CCD1">OIDC — aucune clé statique stockée</text>
+</svg>
+<div class="cap">Fig. 1 — Architecture double-cloud, état au 13/09/2026 : authentification passwordless de bout en bout sur les deux clouds.</div>
+</div>
+
+<p>Différence clé avec le schéma du 07/09 : à cette date, <code>arkcloud_app</code> existait déjà sur les deux clouds mais s'authentifiait encore par mot de passe (roté automatiquement, mais un mot de passe quand même). Depuis le 12-13/09, <strong>plus aucun mot de passe n'existe pour ce chemin de connexion</strong> — seul le compte admin (<code>arkcloudadmin</code>/<code>arkcloudadmin</code>) garde un mot de passe, roté automatiquement tous les 90 jours et utilisé uniquement pour les migrations/bootstrap, jamais par l'application en fonctionnement normal.</p>
+
+<hr>
+
+<h1 id="s3">3. Chronologie du sprint</h1>
+
+<table>
+<tr><th>Période</th><th>Contenu</th><th>Tâches</th></tr>
+<tr><td>Fin août</td><td>Incident tfplan, remédiation Tier 1, début du sprint</td><td>—</td></tr>
+<tr><td>Semaine 1</td><td>NSG flow logs, HTTPS/ACM AWS, rotation auto Postgres (Azure+AWS), GuardDuty, Defender, audit IAM, fitness functions (ArchUnitNET, infracost)</td><td>#48-59</td></tr>
+<tr><td>Semaine 2</td><td>STRIDE threat modeling (5 flux), ADR, <code>arkcloud_app</code> (DML seul, 2 clouds), rapport intermédiaire (07/09)</td><td>#60-77</td></tr>
+<tr><td>Semaine 2-3</td><td>Azure Functions (réseau + module + code + apply réel), backlog Kudu, bascule réelle vers <code>arkcloud_app</code>, incident tfplan #2 (purge + rotation complète), diagnostic 503</td><td>#78-92</td></tr>
+<tr><td>Semaine 3</td><td>Drill de restauration STRIDE flux 5 (réel), passwordless AWS (IAM DB auth), SBOM/Cosign, RGPD (FK orpheline + purge auto), Renovate/Snyk/SonarCloud (câblage CI)</td><td>#89-97</td></tr>
+<tr><td>12/09</td><td>Diagnostic CI, investigation coûts Azure (42€ vs 7-10€ cible), passwordless Azure — Terraform + C#</td><td>#98-101</td></tr>
+<tr><td>12-13/09</td><td><strong>Bootstrap opérationnel réel du passwordless Azure</strong> (§5.2) : bug VNet/Plan, RBAC 403, bootstrap SQL, 3 bugs découverts en route, vérification finale par un vrai test de login</td><td>#100-101, #106</td></tr>
+<tr><td>13/09 (journée)</td><td><strong>Backlog #102 — sécurité zéro-coût</strong> : distroless, pre-commit secret-scanning, DAST, détection de drift</td><td>#107-110</td></tr>
+<tr><td>13/09 (soir)</td><td><strong>Clôture finale</strong> : nettoyage réseau orphelin appliqué en Azure réel, actions CI pinnées sur SHA + permissions job-level, Snyk/SonarCloud réellement connectés et triés</td><td>#104, #111</td></tr>
+</table>
+
+<hr>
+
+<h1 id="s4">4. Modélisation de menaces STRIDE — bilan</h1>
+
+<p>Le tableau complet (5 flux × 6 catégories) est détaillé dans <code>docs/threat-model-stride.md</code>. Bilan de clôture :</p>
+
+<ul>
+<li><strong>Résolues pendant le sprint</strong> : logs d'accès ALB (repudiation, flux 1), privilège applicatif (élévation, flux 3), restaurabilité post-rotation (tampering, flux 5).</li>
+<li><strong>Acceptées et tracées en ADR</strong> : certificat auto-signé (ADR-0003), <code>Jwt:Key</code> non rotatable à chaud (ADR-0004), <code>GHCR_PAT</code> secret humain (ADR-0007), absence de rate limiting infra (ADR-0008).</li>
+<li><strong>Résolu en cours de sprint</strong> : la fuite potentielle de donnée personnelle dans les logs applicatifs (flux 3, information disclosure) — voir §6 RGPD.</li>
+<li><strong>Risque neutralisé hors STRIDE strict</strong> : élévation de privilège via mot de passe applicatif compromis — n'existe plus sur aucun des deux clouds, le mot de passe a disparu du chemin de connexion (§5).</li>
+</ul>
+
+<div class="callout ok"><strong>Zéro menace en attente à la clôture du sprint.</strong></div>
+
+<hr>
+
+<h1 id="s5">5. Authentification passwordless — les deux clouds</h1>
+
+<div class="figure">
+<svg viewBox="0 0 1000 440" xmlns="http://www.w3.org/2000/svg" font-family="Segoe UI, Arial, sans-serif">
+  <defs>
+    <marker id="a2" markerWidth="10" markerHeight="10" refX="8" refY="3" orient="auto"><path d="M0,0 L8,3 L0,6 Z" fill="#605E5C"/></marker>
+  </defs>
+  <rect width="1000" height="440" fill="#fff"/>
+  <text x="250" y="28" text-anchor="middle" font-size="14" font-weight="700" fill="#B35C00">AWS — IAM Database Authentication</text>
+  <text x="750" y="28" text-anchor="middle" font-size="14" font-weight="700" fill="#004578">Azure — Entra ID (AAD)</text>
+  <line x1="500" y1="10" x2="500" y2="430" stroke="#D2D0CE" stroke-width="1" stroke-dasharray="4,4"/>
+
+  <!-- AWS lane -->
+  <g>
+    <rect x="60" y="50" width="180" height="50" rx="6" fill="#FFF8EE" stroke="#FF9900"/>
+    <text x="150" y="70" text-anchor="middle" font-size="11.5" font-weight="600">Tâche ECS (rôle IAM)</text>
+    <text x="150" y="86" text-anchor="middle" font-size="10" fill="#605E5C">rds-db:connect scopé</text>
+    <line x1="150" y1="100" x2="150" y2="130" stroke="#605E5C" marker-end="url(#a2)"/>
+
+    <rect x="60" y="130" width="180" height="50" rx="6" fill="#fff" stroke="#FF9900"/>
+    <text x="150" y="150" text-anchor="middle" font-size="11.5" font-weight="600">SDK AWS</text>
+    <text x="150" y="166" text-anchor="middle" font-size="10" fill="#605E5C">génère un token, 15 min</text>
+    <line x1="150" y1="180" x2="150" y2="210" stroke="#605E5C" marker-end="url(#a2)"/>
+
+    <rect x="60" y="210" width="180" height="50" rx="6" fill="#DFF6DD" stroke="#107C10"/>
+    <text x="150" y="230" text-anchor="middle" font-size="11.5" font-weight="700" fill="#0B5A0B">Connexion RDS</text>
+    <text x="150" y="246" text-anchor="middle" font-size="10" fill="#0B5A0B">token = mot de passe (une fois)</text>
+    <line x1="150" y1="260" x2="150" y2="290" stroke="#605E5C" marker-end="url(#a2)"/>
+
+    <rect x="60" y="290" width="180" height="50" rx="6" fill="#fff" stroke="#FF9900"/>
+    <text x="150" y="310" text-anchor="middle" font-size="11.5" font-weight="600">rôle arkcloud_app</text>
+    <text x="150" y="326" text-anchor="middle" font-size="10" fill="#605E5C">DML seul (SELECT/INSERT/UPDATE/DELETE)</text>
+
+    <rect x="330" y="150" width="150" height="60" rx="6" fill="#F3F2F1" stroke="#D2D0CE"/>
+    <text x="405" y="172" text-anchor="middle" font-size="11" font-weight="600">Vérifié en réel</text>
+    <text x="405" y="188" text-anchor="middle" font-size="9.5" fill="#605E5C">login OK, 401 propre</text>
+    <text x="405" y="201" text-anchor="middle" font-size="9.5" fill="#605E5C">pour user inexistant</text>
+  </g>
+
+  <!-- Azure lane -->
+  <g>
+    <rect x="560" y="50" width="180" height="50" rx="6" fill="#EFF6FC" stroke="#0078D4"/>
+    <text x="650" y="70" text-anchor="middle" font-size="11.5" font-weight="600">App Service (Managed Identity)</text>
+    <text x="650" y="86" text-anchor="middle" font-size="10" fill="#605E5C">identité système</text>
+    <line x1="650" y1="100" x2="650" y2="130" stroke="#605E5C" marker-end="url(#a2)"/>
+
+    <rect x="560" y="130" width="180" height="50" rx="6" fill="#fff" stroke="#0078D4"/>
+    <text x="650" y="150" text-anchor="middle" font-size="11.5" font-weight="600">Azure.Identity SDK</text>
+    <text x="650" y="166" text-anchor="middle" font-size="10" fill="#605E5C">token Entra ID (AAD)</text>
+    <line x1="650" y1="180" x2="650" y2="210" stroke="#605E5C" marker-end="url(#a2)"/>
+
+    <rect x="560" y="210" width="180" height="50" rx="6" fill="#DFF6DD" stroke="#107C10"/>
+    <text x="650" y="230" text-anchor="middle" font-size="11.5" font-weight="700" fill="#0B5A0B">Connexion PostgreSQL</text>
+    <text x="650" y="246" text-anchor="middle" font-size="10" fill="#0B5A0B">pgaadauth (extension AAD)</text>
+    <line x1="650" y1="260" x2="650" y2="290" stroke="#605E5C" marker-end="url(#a2)"/>
+
+    <rect x="560" y="290" width="180" height="50" rx="6" fill="#fff" stroke="#0078D4"/>
+    <text x="650" y="310" text-anchor="middle" font-size="11.5" font-weight="600">rôle arkcloud_app</text>
+    <text x="650" y="326" text-anchor="middle" font-size="10" fill="#605E5C">GRANT via identité managée</text>
+
+    <rect x="830" y="150" width="150" height="60" rx="6" fill="#F3F2F1" stroke="#D2D0CE"/>
+    <text x="905" y="172" text-anchor="middle" font-size="11" font-weight="600">Vérifié en réel</text>
+    <text x="905" y="188" text-anchor="middle" font-size="9.5" fill="#605E5C">bootstrap Kudu, 5 bugs</text>
+    <text x="905" y="201" text-anchor="middle" font-size="9.5" fill="#605E5C">corrigés (§5.2), 401 propre</text>
+  </g>
+
+  <rect x="60" y="380" width="880" height="40" rx="6" fill="#FDE7E9" stroke="#D13438"/>
+  <text x="500" y="404" text-anchor="middle" font-size="11.5" fill="#8E1A1D">Seul point commun restant avec un mot de passe : le compte admin (bootstrap/migrations), roté tous les 90 jours, jamais utilisé par l'app en fonctionnement normal</text>
+</svg>
+<div class="cap">Fig. 2 — Flux d'authentification passwordless comparés, AWS (IAM DB auth) et Azure (Entra ID).</div>
+</div>
+
+<h2>5.1 AWS — IAM Database Authentication</h2>
+<p><code>arkcloud_app</code> s'authentifie via un token IAM de courte durée (15 minutes, généré par le SDK AWS au moment de la connexion) au lieu d'un mot de passe stocké. Le rôle IAM de la tâche ECS a la permission <code>rds-db:connect</code> scopée à l'utilisateur <code>arkcloud_app</code> et à l'instance RDS précise — pas de wildcard. Vérifié en conditions réelles (login réussi, <code>401</code> proprement retourné pour un utilisateur inexistant, pas de <code>500</code>).</p>
+
+<h2>5.2 Azure — Entra ID (12-13/09/2026) — bootstrap opérationnel complet</h2>
+<p>Contrairement à AWS, le scope Azure de l'ADR-0011 était resté <em>implémenté mais jamais opéré en réel</em> jusqu'au 12/09. Cette section documente le bootstrap réel, bug par bug — la partie la plus dense du sprint.</p>
+
+<h3>5.2.1 Blocage infra : changement de Plan App Service vs VNet Integration</h3>
+<div class="callout sec"><strong>Erreur rencontrée :</strong><br><code>400 Bad Request: Changing App Service Plans is not allowed when Regional VNET integration is enabled. Please disconnect from the VNET and then try again.</code></div>
+<p>Azure refuse de changer <code>service_plan_id</code> sur un <code>azurerm_linux_web_app</code> tant que la Regional VNet Integration est active — non documenté par le provider avant d'y être confronté. <strong>Fix</strong> : toggle Terraform temporaire, 2 applys.</p>
+
+<pre><code>variable "disconnect_vnet_for_plan_migration" {
+  description = "true = déconnecte temporairement virtual_network_subnet_id sur les 2 App Services. Remettre à false une fois le swap de Plan terminé et vérifié."
+  type        = bool
+  default     = false
+}</code></pre>
+
+<pre><code>vnet_integration_subnet_id = var.disconnect_vnet_for_plan_migration ? null : module.network.api_subnet_id</code></pre>
+
+<p>Résultat : <code>Apply complete! Resources: 0 added, 2 changed, 0 destroyed.</code> Ce même swap de Plan a permis de partager un seul <code>azurerm_service_plan</code> entre l'API et Blazor (~12€/mois économisés).</p>
+
+<h3>5.2.2 Blocage IAM : Role Definition 403</h3>
+<div class="callout sec"><code>Error: updating Role Definition ... 403 (403 Forbidden) AuthorizationFailed</code></div>
+<p>Le service principal CI n'avait pas de rôle <code>Role Based Access Control Administrator</code> au bon scope. Corrigé par une attribution de rôle explicite ; second échec identique dû à la propagation Azure AD (2-5 min), résolu en retentant.</p>
+
+<h3>5.2.3 Bootstrap SQL — la fonction <code>pgaadauth_*</code> n'existe que sur <code>postgres</code></h3>
+<div class="callout sec"><code>ERROR: function pgaadauth_create_principal(unknown, boolean, boolean) does not exist</code></div>
+<p><code>\df *pgaadauth*</code> renvoie 0 lignes sur <code>arkcloud</code>, la liste complète sur <code>postgres</code>. Contrairement à ce que laisse entendre la documentation Microsoft, ces fonctions ne sont <strong>pas</strong> exposées sur chaque base — fix : <code>\c postgres</code> pour créer le principal, puis <code>\c arkcloud</code> pour le <code>GRANT</code>.</p>
+<p>Réseau : Azure Cloud Shell ne peut pas joindre Postgres (réseau Microsoft, pas dans le VNet). Contournement : console SSH Kudu de <code>app-arkcloud-api-dev</code> (dans <code>snet-api</code>), avec un token AAD collé manuellement en <code>PGPASSWORD</code>.</p>
+
+<h3>5.2.4 Découverte : la base Azure <code>arkcloud</code> était totalement vide</h3>
+<p><code>\dt</code> ne listait aucune table. Contrairement à AWS RDS, les migrations EF Core n'avaient <strong>jamais</strong> été appliquées à cette instance Postgres Azure. Blocage annexe (NuGet <code>Azure.Identity</code> downgrade, NU1605) corrigé, script de migration généré et appliqué manuellement via Kudu.</p>
+<div class="callout warn"><strong>Piège de transfert :</strong> le fichier généré par <code>dotnet ef migrations script</code> sur Windows commence par un BOM UTF-8, qui casse la première instruction SQL après l'aller-retour PowerShell → base64 → Kudu. Fix : <code>tail -c +4</code>.</div>
+
+<h3>5.2.5 <code>42501: permission denied</code> après création des tables</h3>
+<p>Les tables venaient d'être créées par l'admin AAD humain, pas par <code>arkcloudadmin</code> — <code>ALTER DEFAULT PRIVILEGES</code> ne s'applique qu'aux objets créés par le rôle exact qu'il cible. Fix par un re-<code>GRANT</code> explicite.</p>
+
+<h3>5.2.6 Bascule finale et vérification</h3>
+<pre><code>POST /api/api/v1/auth/login  {"email":"test@test.com","password":"bidon"}
+→ 401 Unauthorized {"title":"Authentication failed","status":401,"detail":"Invalid email or password."}</code></pre>
+<p>Un <code>401</code> propre (pas un <code>500</code>) prouve que l'app a bien lu la table <code>users</code> via un token Entra ID de l'identité managée système — aucune chaîne de connexion avec mot de passe n'a été utilisée. <code>password_auth_enabled</code> reste actif côté serveur PostgreSQL pour un rollback instantané.</p>
+
+<hr>
+
+<h1 id="s6">6. RGPD — classification, correction et purge automatisée</h1>
+<ul>
+<li><strong>Classification des données personnelles</strong> (<code>docs/rgpd-classification-donnees.md</code>) : entités <code>Customer</code>/<code>User</code> identifiées comme PII, vérification qu'aucune donnée personnelle ne fuite dans les logs applicatifs.</li>
+<li><strong>Correction d'une FK orpheline</strong> : <code>orders.customer_id</code> pouvait pointer vers un client déjà anonymisé sans contrainte — ajout d'une vraie clé étrangère + logique d'anonymisation cohérente.</li>
+<li><strong>Purge automatisée</strong> : job périodique, rétention de 3 ans après la dernière commande, anonymisation plutôt que suppression physique. Actif uniquement côté Azure — AWS n'a pas d'équivalent Lambda autonome pour cette tâche (pas de chemin réseau vers le VPC privé sans coût supplémentaire).</li>
+</ul>
+
+<hr>
+
+<h1 id="s7">7. Chaîne d'approvisionnement logicielle &amp; scans réels</h1>
+
+<p>Cette section a changé de nature depuis le rapport initial du 13/09 : Snyk et SonarCloud sont passés de « câblés en no-op » à <strong>réellement connectés, exécutés et triés</strong> le jour même (backlog #111), après un premier vrai scan sur l'ensemble du code.</p>
+
+<h2>7.1 SBOM, signature, attestation</h2>
+<ul>
+<li><strong>SBOM</strong> (Syft, format SPDX) généré à chaque build d'image, publié comme artefact CI.</li>
+<li><strong>Signature d'images</strong> (Cosign, signature « keyless » via le token OIDC de GitHub Actions — aucune clé à générer/stocker/faire tourner).</li>
+<li><strong>Attestation</strong> : le SBOM est attaché à l'image comme attestation in-toto, récupérable directement depuis le registre (<code>cosign verify-attestation</code>).</li>
+<li><strong>Renovate</strong> : configuration de mise à jour automatique des dépendances (<code>renovate.json</code>).</li>
+</ul>
+
+<h2>7.2 Premier scan réel SonarCloud/Snyk (13/09, soir)</h2>
+<p>Comptes créés, secrets <code>SNYK_TOKEN</code>/<code>SONAR_TOKEN</code> et variables <code>SONAR_ORGANIZATION</code>/<code>SONAR_PROJECT_KEY</code> ajoutés au repo. Premier scan réel :</p>
+
+<table>
+<tr><th></th><th>Avant durcissement (#111)</th><th>Après durcissement (#111)</th></tr>
+<tr><td>Security issues (SonarCloud)</td><td>27 (78% High)</td><td><strong>1</strong> (Low, accepté)</td></tr>
+<tr><td>Coverage</td><td>0.0%</td><td><strong>65.4%</strong></td></tr>
+<tr><td>Security Hotspots</td><td>20 (actions GitHub non pinnées SHA)</td><td><strong>0</strong></td></tr>
+</table>
+
+<p>Diagnostic des 27 findings initiaux : <strong>aucune vulnérabilité applicative</strong> (pas d'injection SQL, pas de secret en dur, pas de XSS) — 20 étaient des Security Hotspots « actions GitHub Actions non pinnées sur hash de commit complet » (recommandation de durcissement de la chaîne d'approvisionnement CI, cf. incident tj-actions/changed-files de mars 2025) et 5 des permissions <code>write</code> trop larges au niveau workflow plutôt que job. La couverture à 0% venait de l'absence de rapport de couverture transmis à Sonar, pas de tests manquants.</p>
+
+<h3>Corrections appliquées (#111)</h3>
+<ul>
+<li>Toutes les actions GitHub Actions des 3 workflows (<code>arkcloud-backend-ci.yml</code>, <code>arkcloud-frontend-ci.yml</code>, <code>dast-scan.yml</code>) pinnées sur hash de commit complet (ex. <code>actions/checkout@11d5960a...262 # v4</code>) au lieu d'un tag mutable.</li>
+<li>Permissions <code>packages:write</code>/<code>id-token:write</code>/<code>issues:write</code> déplacées du niveau workflow au niveau job — seul le job qui en a réellement besoin les obtient.</li>
+<li><code>dotnet test --collect:"XPlat Code Coverage"</code> ajouté, résultats transmis à SonarCloud via <code>sonar.cs.cobertura.reportsPaths</code>.</li>
+</ul>
+
+<div class="callout warn">Résiduel accepté : le Dockerfile.api tournant en <code>root</code> (nécessaire pour <code>sshd</code>/<code>psql</code>, runbook de rotation Kudu §5.2, ADR-0010) — marqué « Won't Fix » dans SonarCloud avec justification, pas un oubli.</div>
+
+<hr>
+
+<h1 id="s8">8. Réseau Azure — nettoyage et état final</h1>
+
+<p>Le partage d'un seul App Service Plan entre l'API et Blazor (§2, §5.2.1) a rendu orphelins deux ressources réseau créées au Sprint 4 : le subnet <code>snet-web</code> et son NSG <code>nsg-web</code>. Retirés du module Terraform <code>network</code> et appliqués en Azure réel le 13/09 (backlog #104) — <code>Plan: 0 to add, 0 to change, 3 to destroy</code>, confirmé par un run CI vert.</p>
+
+<div class="figure">
+<svg viewBox="0 0 900 460" xmlns="http://www.w3.org/2000/svg" font-family="Segoe UI, Arial, sans-serif">
+  <defs><marker id="a3" markerWidth="10" markerHeight="10" refX="8" refY="3" orient="auto"><path d="M0,0 L8,3 L0,6 Z" fill="#0078D4"/></marker></defs>
+  <rect width="900" height="460" fill="#fff"/>
+  <rect x="40" y="30" width="820" height="400" rx="10" fill="#EFF6FC" stroke="#0078D4" stroke-width="1.5"/>
+  <text x="60" y="58" font-size="13" font-weight="700" fill="#004578">VNet vnet-arkcloud-dev — 10.10.0.0/16</text>
+
+  <rect x="70" y="80" width="230" height="140" rx="8" fill="#fff" stroke="#0078D4" stroke-width="1.5"/>
+  <text x="185" y="102" text-anchor="middle" font-size="12" font-weight="700">snet-api</text>
+  <text x="185" y="117" text-anchor="middle" font-size="10.5" fill="#605E5C">10.10.1.0/24</text>
+  <text x="185" y="134" text-anchor="middle" font-size="9.5" fill="#605E5C">délégué Microsoft.Web/serverFarms</text>
+  <rect x="90" y="145" width="80" height="30" rx="4" fill="#EFF6FC" stroke="#0078D4"/>
+  <text x="130" y="164" text-anchor="middle" font-size="9.5">app-api</text>
+  <rect x="200" y="145" width="80" height="30" rx="4" fill="#EFF6FC" stroke="#0078D4"/>
+  <text x="240" y="164" text-anchor="middle" font-size="9.5">app-web</text>
+  <text x="185" y="195" text-anchor="middle" font-size="9" fill="#605E5C">(partagent le même Plan</text>
+  <text x="185" y="207" text-anchor="middle" font-size="9" fill="#605E5C">depuis le 12/09, §2)</text>
+
+  <rect x="330" y="80" width="230" height="140" rx="8" fill="#fff" stroke="#0078D4" stroke-width="1.5"/>
+  <text x="445" y="102" text-anchor="middle" font-size="12" font-weight="700">snet-db</text>
+  <text x="445" y="117" text-anchor="middle" font-size="10.5" fill="#605E5C">10.10.2.0/24</text>
+  <text x="445" y="134" text-anchor="middle" font-size="9.5" fill="#605E5C">délégué Microsoft.DBforPostgreSQL</text>
+  <rect x="380" y="150" width="130" height="32" rx="4" fill="#EFF6FC" stroke="#0078D4"/>
+  <text x="445" y="170" text-anchor="middle" font-size="9.5">PostgreSQL Flexible Server</text>
+
+  <rect x="590" y="80" width="230" height="140" rx="8" fill="#fff" stroke="#0078D4" stroke-width="1.5" stroke-dasharray="4,3"/>
+  <text x="705" y="102" text-anchor="middle" font-size="12" font-weight="700">snet-pe</text>
+  <text x="705" y="117" text-anchor="middle" font-size="10.5" fill="#605E5C">10.10.3.0/24</text>
+  <text x="705" y="140" text-anchor="middle" font-size="9.5" fill="#605E5C">réservé private endpoints</text>
+  <text x="705" y="155" text-anchor="middle" font-size="9.5" fill="#605E5C">(Key Vault, storage)</text>
+  <text x="705" y="170" text-anchor="middle" font-size="9.5" fill="#605E5C">vide, non provisionné</text>
+
+  <line x1="185" y1="220" x2="185" y2="248" stroke="#0078D4" stroke-width="1.8" marker-end="url(#a3)"/>
+  <line x1="445" y1="220" x2="445" y2="248" stroke="#0078D4" stroke-width="1.8"/>
+  <line x1="185" y1="248" x2="445" y2="248" stroke="#0078D4" stroke-width="1.8"/>
+  <text x="315" y="242" text-anchor="middle" font-size="9.5" fill="#004578">5432, AllowPostgresFromApi (nsg-database)</text>
+
+  <rect x="70" y="270" width="750" height="60" rx="6" fill="#FDE7E9" stroke="#D13438"/>
+  <text x="445" y="290" text-anchor="middle" font-size="11.5" font-weight="700" fill="#8E1A1D">10.10.4.0/24 — snet-web / nsg-web RETIRÉS (13/09, backlog #104)</text>
+  <text x="445" y="306" text-anchor="middle" font-size="9.5" fill="#8E1A1D">Orphelins depuis le partage de Plan · appliqué en Azure réel · adresse libre pour usage futur</text>
+  <text x="445" y="320" text-anchor="middle" font-size="9.5" fill="#8E1A1D">Défense en profondeur perdue (deny sortant vers DB) — compromis assumé du partage de Plan (~12€/mois)</text>
+
+  <rect x="70" y="350" width="750" height="60" rx="6" fill="#F3F2F1" stroke="#D2D0CE"/>
+  <text x="445" y="370" text-anchor="middle" font-size="11" font-weight="600">Ce qui protège encore la base contre un accès direct de Blazor</text>
+  <text x="445" y="388" text-anchor="middle" font-size="9.5" fill="#605E5C">Convention applicative uniquement (Blazor Server n'appelle jamais la DB, seulement l'API HTTP) — plus un fait réseau</text>
+</svg>
+<div class="cap">Fig. 3 — Réseau Azure post-nettoyage : 3 subnets actifs, snet-web/nsg-web retirés.</div>
+</div>
+
+<hr>
+
+<h1 id="s9">9. Pipeline CI/CD — vue d'ensemble</h1>
+
+<div class="figure">
+<svg viewBox="0 0 1000 520" xmlns="http://www.w3.org/2000/svg" font-family="Segoe UI, Arial, sans-serif">
+  <defs><marker id="a4" markerWidth="10" markerHeight="10" refX="8" refY="3" orient="auto"><path d="M0,0 L8,3 L0,6 Z" fill="#605E5C"/></marker></defs>
+  <rect width="1000" height="520" fill="#fff"/>
+
+  <rect x="30" y="30" width="150" height="50" rx="8" fill="#24292E"/>
+  <text x="105" y="50" text-anchor="middle" font-size="11" fill="#fff" font-weight="700">git commit</text>
+  <text x="105" y="66" text-anchor="middle" font-size="9.5" fill="#C9CCD1">pre-commit: gitleaks</text>
+  <line x1="180" y1="55" x2="220" y2="55" stroke="#605E5C" marker-end="url(#a4)"/>
+
+  <rect x="220" y="30" width="150" height="50" rx="8" fill="#24292E"/>
+  <text x="295" y="50" text-anchor="middle" font-size="11" fill="#fff" font-weight="700">git push</text>
+  <text x="295" y="66" text-anchor="middle" font-size="9.5" fill="#C9CCD1">develop → main sync</text>
+  <line x1="295" y1="80" x2="295" y2="110" stroke="#605E5C" marker-end="url(#a4)"/>
+
+  <rect x="60" y="110" width="880" height="150" rx="10" fill="#F8F7F6" stroke="#D2D0CE"/>
+  <text x="80" y="132" font-size="12" font-weight="700" fill="#201F1E">CI — arkcloud-{backend,frontend}-ci.yml (job build-test)</text>
+
+  <rect x="90" y="150" width="140" height="80" rx="6" fill="#fff" stroke="#0078D4"/>
+  <text x="160" y="170" text-anchor="middle" font-size="10.5" font-weight="600">Build + Test</text>
+  <text x="160" y="185" text-anchor="middle" font-size="9" fill="#605E5C">dotnet build/test</text>
+  <text x="160" y="199" text-anchor="middle" font-size="9" fill="#605E5C">+ coverage XPlat</text>
+  <text x="160" y="213" text-anchor="middle" font-size="9" fill="#605E5C">fitness functions</text>
+  <line x1="230" y1="190" x2="260" y2="190" stroke="#605E5C" marker-end="url(#a4)"/>
+
+  <rect x="260" y="150" width="140" height="80" rx="6" fill="#fff" stroke="#D13438"/>
+  <text x="330" y="170" text-anchor="middle" font-size="10.5" font-weight="600">SAST</text>
+  <text x="330" y="185" text-anchor="middle" font-size="9" fill="#605E5C">Snyk (dépendances)</text>
+  <text x="330" y="199" text-anchor="middle" font-size="9" fill="#605E5C">SonarCloud</text>
+  <text x="330" y="213" text-anchor="middle" font-size="9" fill="#605E5C">(begin/end + coverage)</text>
+  <line x1="400" y1="190" x2="430" y2="190" stroke="#605E5C" marker-end="url(#a4)"/>
+
+  <rect x="430" y="150" width="140" height="80" rx="6" fill="#fff" stroke="#0078D4"/>
+  <text x="500" y="170" text-anchor="middle" font-size="10.5" font-weight="600">Build image</text>
+  <text x="500" y="185" text-anchor="middle" font-size="9" fill="#605E5C">distroless (Blazor)</text>
+  <text x="500" y="199" text-anchor="middle" font-size="9" fill="#605E5C">standard + sshd (API,</text>
+  <text x="500" y="213" text-anchor="middle" font-size="9" fill="#605E5C">exception documentée)</text>
+  <line x1="570" y1="190" x2="600" y2="190" stroke="#605E5C" marker-end="url(#a4)"/>
+
+  <rect x="600" y="150" width="140" height="80" rx="6" fill="#fff" stroke="#D13438"/>
+  <text x="670" y="170" text-anchor="middle" font-size="10.5" font-weight="600">Scan image</text>
+  <text x="670" y="185" text-anchor="middle" font-size="9" fill="#605E5C">Trivy (gate CRITICAL/HIGH)</text>
+  <text x="670" y="199" text-anchor="middle" font-size="9" fill="#605E5C">Snyk (container, info)</text>
+  <line x1="740" y1="190" x2="770" y2="190" stroke="#605E5C" marker-end="url(#a4)"/>
+
+  <rect x="770" y="150" width="140" height="80" rx="6" fill="#fff" stroke="#107C10"/>
+  <text x="840" y="170" text-anchor="middle" font-size="10.5" font-weight="600">Signer + publier</text>
+  <text x="840" y="185" text-anchor="middle" font-size="9" fill="#605E5C">SBOM (Syft)</text>
+  <text x="840" y="199" text-anchor="middle" font-size="9" fill="#605E5C">Cosign sign+attest</text>
+  <text x="840" y="213" text-anchor="middle" font-size="9" fill="#605E5C">push GHCR + ECR</text>
+
+  <line x1="500" y1="260" x2="500" y2="290" stroke="#605E5C" marker-end="url(#a4)"/>
+  <rect x="360" y="290" width="280" height="50" rx="8" fill="#EFF6FC" stroke="#0078D4"/>
+  <text x="500" y="310" text-anchor="middle" font-size="11" font-weight="700">Déploiement dev (repository_dispatch)</text>
+  <text x="500" y="326" text-anchor="middle" font-size="9.5" fill="#605E5C">ArkCloudInfra · terraform apply -target</text>
+
+  <line x1="500" y1="340" x2="500" y2="370" stroke="#605E5C" marker-end="url(#a4)"/>
+  <rect x="60" y="370" width="400" height="60" rx="8" fill="#FDE7E9" stroke="#D13438"/>
+  <text x="260" y="392" text-anchor="middle" font-size="11" font-weight="700" fill="#8E1A1D">DAST (manuel, post-déploiement)</text>
+  <text x="260" y="408" text-anchor="middle" font-size="9.5" fill="#8E1A1D">OWASP ZAP baseline · 0 High · .zap/rules.tsv</text>
+  <text x="260" y="421" text-anchor="middle" font-size="9.5" fill="#8E1A1D">gate durci : fail sur tout nouveau finding</text>
+
+  <rect x="540" y="370" width="400" height="60" rx="8" fill="#EFF6FC" stroke="#0078D4"/>
+  <text x="740" y="392" text-anchor="middle" font-size="11" font-weight="700" fill="#004578">Drift detection (hebdo, lundi 8h UTC)</text>
+  <text x="740" y="408" text-anchor="middle" font-size="9.5" fill="#004578">ArkCloudInfra · terraform plan -detailed-exitcode</text>
+  <text x="740" y="421" text-anchor="middle" font-size="9.5" fill="#004578">lecture seule, jamais d'apply</text>
+
+  <rect x="60" y="450" width="880" height="50" rx="8" fill="#F3F2F1" stroke="#D2D0CE"/>
+  <text x="500" y="470" text-anchor="middle" font-size="10.5" font-weight="600">Toutes les actions GitHub pinnées sur SHA complet · permissions au niveau job (#111)</text>
+  <text x="500" y="486" text-anchor="middle" font-size="9.5" fill="#605E5C">Checkov (Terraform) · OIDC AWS/Azure, aucune clé statique</text>
+</svg>
+<div class="cap">Fig. 4 — Pipeline CI/CD complet avec les couches de sécurité du backlog #102 et le durcissement #111.</div>
+</div>
+
+<hr>
+
+<h1 id="s10">10. Coûts</h1>
+<ul>
+<li><strong>Investigation</strong> : dépense Azure réelle à 42€ contre une cible de 7-10€/mois — cause principale identifiée et traitée séparément (tâche #99).</li>
+<li><strong>Plan App Service partagé</strong> (12/09) : fusion des deux Plans B1 (API + Blazor) en un seul — <strong>~12€/mois économisés</strong>.</li>
+<li><strong>Cost-guard</strong> : budget Azure à 7€/mois avec arrêt automatique de PostgreSQL à 100% de dépense constatée (Automation Runbook, stop-only).</li>
+<li><strong>Arrêt/démarrage manuel à la demande</strong> : <code>dev-env-down.yml</code> / <code>dev-env-up.yml</code>, déclenchables à la main — remplace un planning fixe jugé inadapté à un rythme de dev sporadique.</li>
+</ul>
+
+<hr>
+
+<h1 id="s11">11. Backlog #102 — sécurité zéro-coût (détail)</h1>
+
+<h3>11.1 Images distroless</h3>
+<p><code>deploy/docker/Dockerfile.blazor</code> basculé sur <code>mcr.microsoft.com/dotnet/aspnet:10.0-noble-chiseled</code> (sans shell ni gestionnaire de paquets). <code>Dockerfile.api</code> <strong>volontairement laissé sur l'image standard</strong> — exception documentée : ce Dockerfile embarque un <code>sshd</code> custom + <code>postgresql-client</code>, mécanisme Kudu utilisé pour toute la rotation/bootstrap <code>arkcloud_app</code> (§5.2). Une image distroless casserait ce runbook.</p>
+
+<h3>11.2 Pre-commit secret-scanning</h3>
+<p><code>gitleaks</code> via le framework <code>pre-commit</code>, sur les deux repos. Scan initial : <strong>0 secret détecté</strong>, aucun faux positif à traiter.</p>
+
+<h3>11.3 DAST — OWASP ZAP baseline</h3>
+<p>Workflow <code>dast-scan.yml</code>, scan contre l'API et le Blazor réellement déployés en dev. Premier passage : <strong>0 High</strong> sur les deux apps. Findings Medium/Low triés et documentés dans <code>.zap/rules.tsv</code> — gate durci pour échouer sur tout nouveau type de finding.</p>
+
+<h3>11.4 Détection de drift Terraform</h3>
+<p>Workflow <code>drift-detection.yml</code>, <code>terraform plan -detailed-exitcode</code> hebdomadaire + déclenchable à la main — lecture seule. Premier run réel : <strong>aucun drift</strong>.</p>
+
+<h3>11.5 Bug corollaire trouvé et corrigé</h3>
+<p><code>deploy-on-image.yml</code> échouait avec <code>No value for required variable</code> sur <code>entra_admin_principal_name</code>/<code>entra_admin_object_id</code> — variables ajoutées ailleurs lors du passwordless Azure mais oubliées dans ce workflow. Corrigé.</p>
+
+<hr>
+
+<h1 id="s12">12. Registre des décisions d'architecture (ADR)</h1>
+<table>
+<tr><th>ADR</th><th>Titre</th><th>Statut</th></tr>
+<tr><td>0003</td><td>Certificat auto-signé sur l'ALB AWS</td><td>Acceptée (temporaire)</td></tr>
+<tr><td>0004</td><td>Rotation automatique sélective des secrets</td><td>Acceptée</td></tr>
+<tr><td>0007</td><td><code>GHCR_PAT</code> — risque accepté</td><td>Acceptée</td></tr>
+<tr><td>0008</td><td>Rate limiting applicatif seul</td><td>Acceptée (temporaire)</td></tr>
+<tr><td>0009</td><td>Stratégie de branches et versionning</td><td>Acceptée</td></tr>
+<tr><td>0010</td><td>Bootstrap/rotation <code>arkcloud_app</code> Azure — Kudu manuel</td><td>Acceptée (implémentée, §5.2)</td></tr>
+<tr><td>0011</td><td>Authentification passwordless <code>arkcloud_app</code></td><td><strong>Acceptée et implémentée — AWS et Azure, vérifiées en conditions réelles</strong></td></tr>
+<tr><td>0012</td><td>Purge RGPD automatisée</td><td>Acceptée (implémentée)</td></tr>
+<tr><td>0013</td><td>Parité d'environnement dev/staging/prod</td><td>Acceptée</td></tr>
+</table>
+
+<hr>
+
+<h1 id="s13">13. Ce qui reste ouvert</h1>
+<ul>
+<li><strong><code>ALTER DEFAULT PRIVILEGES</code> pour l'admin AAD</strong> : idée de backlog (§5.2.5) pour éviter un re-<code>GRANT</code> manuel après une future migration lancée par un admin humain plutôt que par <code>arkcloudadmin</code> — peu fréquent en pratique (CI utilise <code>arkcloudadmin</code>), effort ~5 min, pas fait.</li>
+<li><strong>staging/prod</strong> : toujours non provisionnés (seul <code>dev</code> a une config Terraform réelle) — ADR-0013 pose les bases de parité, l'implémentation reste un sprint applicatif futur, de plus grande ampleur (nouveaux states, secrets, pipelines de promotion).</li>
+<li><strong>Quality Gate SonarCloud — New Code</strong> : en échec sur le tout premier scan (normal, pas de baseline de comparaison encore) — se stabilise avec les prochains commits, aucune action requise.</li>
+<li><strong>Dockerfile.api en root</strong> : exception documentée et acceptée (Kudu/sshd), à marquer « Won't Fix » dans SonarCloud avec justification.</li>
+</ul>
+
+<hr>
+<p style="color:var(--sub); font-size:11.5px; text-align:center; margin-top:50px;">ArkCloud — État des lieux Sprint 6 · généré le 13 septembre 2026 · document imprimable (Ctrl+P → Enregistrer en PDF)</p>
+
+</div>
+</body>
+</html>
