@@ -31,7 +31,7 @@
          NU1605 "package downgrade" bloque le restore en Warning-As-Error dès que ce projet
          référence directement une version antérieure à celle exigée transitivement. -->
     <PackageReference Include="Azure.Identity" Version="1.14.2" />
-    <PackageReference Include="Microsoft.EntityFrameworkCore.Design" Version="10.0.9">
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Design" Version="10.0.14">
       <PrivateAssets>all</PrivateAssets>
       <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
     </PackageReference>
